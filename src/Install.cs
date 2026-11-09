@@ -14,7 +14,7 @@ namespace CodexSteamBridge
     public sealed class OwnedAsset { public string Path = ""; public string Hash = ""; }
     public sealed class Installation
     {
-        public string Version = "0.1.0";
+        public string Version = "0.1.1";
         public string Root = "";
         public string CodexHome = "";
         public List<string> HookKeys = new List<string>();
@@ -154,7 +154,7 @@ namespace CodexSteamBridge
                 process.ErrorDataReceived += (s, e) => { }; process.BeginErrorReadLine();
                 try
                 {
-                    process.StandardInput.WriteLine(Json.Serializer().Serialize(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "codex_steam_bridge", version = "0.1.0" }, capabilities = new { } } }));
+                    process.StandardInput.WriteLine(Json.Serializer().Serialize(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "codex_steam_bridge", version = "0.1.1" }, capabilities = new { } } }));
                     process.StandardInput.Flush(); Response(process, 1, 8000);
                     process.StandardInput.WriteLine("{\"method\":\"initialized\"}");
                     process.StandardInput.WriteLine(Json.Serializer().Serialize(new { id = 2, method = "hooks/list", @params = new { cwds = new[] { root } } }));
@@ -264,7 +264,7 @@ namespace CodexSteamBridge
             var changes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
             var manifestPath = Path.Combine(root, "installation.json");
             Installation manifest = File.Exists(manifestPath) ? Json.Read<Installation>(manifestPath) : new Installation();
-            manifest.Root = root; manifest.CodexHome = settings.CodexHome; manifest.Version = "0.1.0";
+            manifest.Root = root; manifest.CodexHome = settings.CodexHome; manifest.Version = "0.1.1";
             string icon = Path.Combine(root, "artwork", "logo.ico");
             var configured = new List<AccountConfig>(settings.Accounts);
             foreach (string account in accounts)

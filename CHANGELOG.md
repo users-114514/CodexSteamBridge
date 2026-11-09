@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — 2026-11-09
+
+- Build the notification receiver as a console executable so the existing trusted Windows PowerShell command forwards Codex's JSON input; keep the manager and Steam presence as windowless GUI executables.
+- Start the task worker without inheriting notification pipe handles, allowing the one-shot receiver to finish while the worker remains active.
+- Add process regression checks for the exact registered command with Unicode/spaced paths and for a live task worker releasing the receiver's output pipes.
+- Keep the Visual Studio project building both executable types and disable duplicate target-framework metadata generation.
+
 ## 0.1.0 — 2026-11-08
 
 - Windows Forms manager in Simplified Chinese and English; per-user installation, repair and uninstall.

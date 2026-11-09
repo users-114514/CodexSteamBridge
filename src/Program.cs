@@ -6,8 +6,8 @@ using System.Runtime.Versioning;
 using System.Reflection;
 
 [assembly: AssemblyTitle("CodexSteamBridge")]
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
+[assembly: AssemblyVersion("0.1.1.0")]
+[assembly: AssemblyFileVersion("0.1.1.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace CodexSteamBridge

@@ -200,8 +200,13 @@ namespace CodexSteamBridge
         void StartWorker(BridgeState state)
         {
             using (var process = Process.Start(new ProcessStartInfo(Path.Combine(store.Root, "CodexSteamBridge.exe"), "run")
-            { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = store.Root }))
-            { state.WorkerPid = process.Id; state.WorkerTicks = process.StartTime.ToUniversalTime().Ticks; state.HeartbeatTicks = DateTime.UtcNow.Ticks; }
+            { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = store.Root }))
+            {
+                // ShellExecute starts the GUI worker without inheriting the
+                // hook's pipe handles. Redirecting new standard handles still
+                // inherits other open pipes on .NET Framework CreateProcess.
+                state.WorkerPid = process.Id; state.WorkerTicks = process.StartTime.ToUniversalTime().Ticks; state.HeartbeatTicks = DateTime.UtcNow.Ticks;
+            }
         }
 
         public void Receive(Dictionary<string, object> input)

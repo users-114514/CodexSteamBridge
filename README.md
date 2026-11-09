@@ -1,6 +1,8 @@
 # CodexSteamBridge
 
-[English](README.en.md) · Windows x64 · v0.1.0 实验版 · MIT
+[English](README.en.md) · Windows x64 · v0.1.1 实验版 · MIT
+
+[下载 Windows 程序包](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.1.1/CodexSteamBridge-v0.1.1-windows-x64.zip) · [发布说明与校验值](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.1.1)
 
 在本机 VS Code 的 Codex 执行任务时，使用 Steam 非 Steam 游戏条目显示“正在玩 Codex”，所有任务结束后退出状态程序。
 
@@ -11,6 +13,8 @@
 3. 在 VS Code 的 Codex 中选择“审核钩子 / Review hooks”，信任本工具的 7 个通知入口；重新加载已打开的 VS Code 窗口，返回管理界面点击“检查状态”，再提交新任务。程序不会代替用户信任通知入口。
 
 “钩子”是 Codex 在提交、结束、取消任务时调用的本地通知命令。不需要 OpenAI API 密钥，不修改项目代码。
+
+从 v0.1.0 升级：解压 v0.1.1，运行新包中的 `CodexSteamBridge.exe`，选择原安装目录并点击“安装 / 修复”；完成后在 VS Code 执行“开发人员：重新加载窗口”，再提交新任务。升级保留账号、库条目、图片及未变更通知的原有授权；可在管理界面点击“检查状态”确认。
 
 ## 启停规则
 
@@ -42,6 +46,6 @@ Windows x64、.NET Framework 4.8；无需 Python、Node.js 或额外运行时。
 .\Package.ps1
 ```
 
-工程使用系统 C# 编译器、Windows Forms 和框架类库。`src` 包含源码，`tests` 包含隔离验证。GitHub Actions 构建与测试，版本标签 `v0.1.0` 生成发行附件。兼容边界及实测状态见 [COMPATIBILITY.md](COMPATIBILITY.md)。
+工程使用系统 C# 编译器、Windows Forms 和框架类库。`src` 包含源码，`tests` 包含隔离验证。GitHub Actions 构建与测试，版本标签 `v0.1.1` 生成发行附件。兼容边界及实测状态见 [COMPATIBILITY.md](COMPATIBILITY.md)。
 
 项目独立于 OpenAI、Valve 和 Microsoft；发行图片由本项目原创绘制，MIT 许可证不授予第三方商标权。

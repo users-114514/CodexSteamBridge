@@ -27,7 +27,7 @@ namespace CodexSteamBridge
 
         public Manager()
         {
-            Text = "CodexSteamBridge 0.1.0 — Experimental"; MinimumSize = new Size(760, 650); Size = new Size(840, 720);
+            Text = "CodexSteamBridge 0.1.1 — Experimental"; MinimumSize = new Size(760, 650); Size = new Size(840, 720);
             StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); AutoScaleMode = AutoScaleMode.Dpi;
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150)); table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 85)); Controls.Add(table);
             language.Items.AddRange(new[] { "简体中文", "English" }); language.SelectedIndex = 0;

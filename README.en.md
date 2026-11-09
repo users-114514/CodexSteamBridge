@@ -1,6 +1,8 @@
 # CodexSteamBridge
 
-[简体中文](README.md) · Windows x64 · v0.1.0 experimental · MIT
+[简体中文](README.md) · Windows x64 · v0.1.1 experimental · MIT
+
+[Download Windows package](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.1.1/CodexSteamBridge-v0.1.1-windows-x64.zip) · [Release notes and checksums](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.1.1)
 
 Shows “Playing Codex” through a non-Steam shortcut while Codex works in local VS Code. All tasks finishing ends the presence process.
 
@@ -9,6 +11,8 @@ Shows “Playing Codex” through a non-Steam shortcut while Codex works in loca
 1. Extract the release and double-click `CodexSteamBridge.exe`. Default location: `%LOCALAPPDATA%\Programs\CodexSteamBridge`. Close Steam yourself before library changes or uninstalling. The tool never closes/restarts Steam or restores other games.
 2. Verify detected paths and select Steam accounts. Choose Install / repair. Existing installations upgrade in place, preserving shortcut IDs, titles and artwork.
 3. In the Codex composer, select Review hooks and trust the seven handlers. Reload existing VS Code windows, select Check status in the manager, then submit a new task. The installer never grants hook trust on your behalf.
+
+Upgrading from v0.1.0: extract v0.1.1, run its `CodexSteamBridge.exe`, select the existing installation directory and choose Install / repair. Run Developer: Reload Window in VS Code, then submit a new task. Account settings, shortcuts, artwork and trust for unchanged handlers are preserved; use Check status to verify.
 
 ## Lifecycle
 
@@ -34,4 +38,4 @@ Windows x64 and .NET Framework 4.8; no Python, Node.js or additional runtime req
 .\Package.ps1
 ```
 
-See [COMPATIBILITY.md](COMPATIBILITY.md) for limitations and measured coverage. GitHub Actions builds/tests and produces release attachments for `v0.1.0` tags. The project and release artwork use the MIT license. This project is independent of OpenAI, Valve and Microsoft; no trademark rights are granted.
+See [COMPATIBILITY.md](COMPATIBILITY.md) for limitations and measured coverage. GitHub Actions builds/tests and produces release attachments for `v0.1.1` tags. The project and release artwork use the MIT license. This project is independent of OpenAI, Valve and Microsoft; no trademark rights are granted.

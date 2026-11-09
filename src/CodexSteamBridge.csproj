@@ -4,6 +4,7 @@
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <OutputType>WinExe</OutputType>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>CodexSteamBridge</AssemblyName>
     <RootNamespace>CodexSteamBridge</RootNamespace>
@@ -21,4 +22,10 @@
     <None Include="app.manifest"/>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
+  <Target Name="BuildHookReceiver" AfterTargets="Build">
+    <Csc Sources="@(Compile)" References="@(ReferencePath)" TargetType="Exe"
+         OutputAssembly="$(OutputPath)CodexSteamBridge.Hook.exe" Platform="x64"
+         NoConfig="true" Optimize="true" WarningLevel="4" TreatWarningsAsErrors="true"
+         Win32Manifest="$(ApplicationManifest)" />
+  </Target>
 </Project>

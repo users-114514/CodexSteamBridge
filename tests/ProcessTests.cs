@@ -42,11 +42,98 @@ public static class ProcessTests
         foreach (var pair in new[] { new ProcessStamp { Pid = state.WorkerPid, Ticks = state.WorkerTicks }, new ProcessStamp { Pid = state.PresencePid, Ticks = state.PresenceTicks } })
             if (ProcessStamp.Alive(pair.Pid, pair.Ticks)) using (var process = Process.GetProcessById(pair.Pid)) { process.Kill(); process.WaitForExit(2000); }
     }
+    static int HookHost(string mode, string root)
+    {
+        if (mode == "--hook-steam") { Thread.Sleep(15000); return 0; }
+        if (mode == "--hook-host")
+        {
+            using (var child = Process.Start(new ProcessStartInfo(Path.Combine(root, "codex.exe"), "--hook-codex \"" + root + "\"")
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }))
+            {
+                var output = child.StandardOutput.ReadToEndAsync(); var error = child.StandardError.ReadToEndAsync();
+                if (!child.WaitForExit(8000)) { child.Kill(); return 1; }
+                Assert(output.Wait(1000) && error.Wait(1000), "Codex test process retained output handles");
+                Console.Write(output.Result); Console.Error.Write(error.Result);
+                return child.ExitCode;
+            }
+        }
+        var input = Json.Serializer().Serialize(new {
+            hook_event_name = "UserPromptSubmit", session_id = "stdin-session", turn_id = "stdin-turn",
+            transcript_path = Path.Combine(root, "home", "sessions", "fixture.jsonl")
+        });
+        // Use the exact installed PowerShell command, including a Unicode/spaced path.
+        string command = Hooks.Command(root);
+        var store = new StateStore(root);
+        try
+        {
+            using (var child = Process.Start(new ProcessStartInfo("powershell.exe", command.Substring("powershell.exe ".Length))
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
+                  RedirectStandardOutput = true, RedirectStandardError = true }))
+            {
+                var output = child.StandardOutput.ReadToEndAsync(); var error = child.StandardError.ReadToEndAsync();
+                child.StandardInput.Write(input); child.StandardInput.Close();
+                if (!child.WaitForExit(2500)) { child.Kill(); throw new Exception("hook command timed out"); }
+                Assert(output.Wait(500) && error.Wait(500), "worker retained hook output pipes");
+                Assert(child.ExitCode == 0 && output.Result.Trim() == "{}", "hook command did not finish cleanly");
+            }
+            var state = store.Load();
+            Assert(state.ActiveCount == 1 && state.Tasks[0].TurnId == "stdin-turn", "PowerShell lost hook stdin");
+            if (!File.Exists(Path.Combine(root, "steam.exe")))
+                Assert(state.Reason == "steam_missing" && state.WorkerPid == 0, "hook launched worker without Steam");
+            else
+            {
+                Assert(Wait(() => store.Load().Phase == "waiting_login", 1500), "signed-out Steam did not create a bounded waiter");
+                state = store.Load(); Assert(ProcessStamp.Alive(state.WorkerPid, state.WorkerTicks), "hook returned without a live worker");
+                using (var worker = Worker(store))
+                {
+                    File.AppendAllText(Path.Combine(root, "home", "sessions", "fixture.jsonl"),
+                        "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"stdin-turn\"}}\n", new UTF8Encoding(false));
+                    Assert(worker.WaitForExit(2000), "worker did not retire completed hook task");
+                }
+            }
+            return 0;
+        }
+        finally { Cleanup(store); }
+    }
+    static void HookInput(string source, string fixtures, bool runningSteam)
+    {
+        string root = Path.Combine(fixtures, runningSteam ? "通知管道 test" : "通知接收 test"); Directory.CreateDirectory(root);
+        foreach (string name in new[] { "CodexSteamBridge.exe", "CodexSteamBridge.Hook.exe" }) File.Copy(Path.Combine(source, name), Path.Combine(root, name));
+        string self = System.Reflection.Assembly.GetExecutingAssembly().Location;
+        File.Copy(self, Path.Combine(root, "Code.exe")); File.Copy(self, Path.Combine(root, "codex.exe"));
+        string home = Path.Combine(root, "home"), sessions = Path.Combine(home, "sessions"); Directory.CreateDirectory(sessions);
+        File.WriteAllText(Path.Combine(sessions, "fixture.jsonl"), "", new UTF8Encoding(false));
+        Process steam = null;
+        try
+        {
+            if (runningSteam)
+            {
+                File.Copy(self, Path.Combine(root, "steam.exe"));
+                steam = Process.Start(new ProcessStartInfo(Path.Combine(root, "steam.exe"), "--hook-steam \"" + root + "\"")
+                    { UseShellExecute = false, CreateNoWindow = true });
+            }
+            Json.Write(Path.Combine(root, "settings.json"), new Settings {
+                SteamExe = Path.Combine(root, runningSteam ? "steam.exe" : "absent-steam.exe"), CodexHome = home });
+            using (var host = Process.Start(new ProcessStartInfo(Path.Combine(root, "Code.exe"), "--hook-host \"" + root + "\"")
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }))
+            {
+                var output = host.StandardOutput.ReadToEndAsync(); var error = host.StandardError.ReadToEndAsync();
+                if (!host.WaitForExit(10000)) { host.Kill(); throw new Exception("hook process chain timed out"); }
+                Assert(error.Wait(1000) && output.Wait(1000), "hook test process retained output handles");
+                Assert(host.ExitCode == 0, "registered PowerShell hook failed: " + error.Result);
+            }
+        }
+        finally { if (steam != null) { if (!steam.HasExited) { steam.Kill(); steam.WaitForExit(2000); } steam.Dispose(); } }
+        Console.WriteLine(runningSteam ? "PASS real process: worker releases notification pipes and exits on task completion" :
+            "PASS real process: registered PowerShell command forwards task stdin through Unicode and spaced paths");
+    }
     public static int Main(string[] args)
     {
         try
         {
+            if (args.Length == 2 && (args[0] == "--hook-host" || args[0] == "--hook-codex" || args[0] == "--hook-steam")) return HookHost(args[0], args[1]);
             var source = args[0]; string fixtures = args[1]; Directory.CreateDirectory(fixtures);
+            HookInput(source, fixtures, false); HookInput(source, fixtures, true);
             var missing = Prepare(source, Path.Combine(fixtures, "missing"), new Settings { SteamExe = Path.Combine(fixtures, "absent-steam.exe") });
             using (var presence = Presence(missing, "1")) Assert(presence.WaitForExit(2000), "missing Steam kept presence alive");
             var state = missing.Load(); Assert(state.WorkerPid == 0, "missing Steam started worker");

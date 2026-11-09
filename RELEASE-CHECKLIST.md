@@ -15,6 +15,15 @@ evidence of a live Steam friend-list update on another machine.
 No credentials, local settings, runtime state, screenshots, copied conversation
 records or development fixtures may be included in the release archives.
 
+## v0.1.1 local verification — 2026-11-09
+
+- Reproduced v0.1.0's notification input loss through the exact installed Windows PowerShell command; direct execution received the same input successfully.
+- Corrected the receiver executable type and worker handle inheritance. All 35 functional tests and six process checks passed, including both new regressions.
+- Installed the local repair without changing hook definitions, trust records, Steam account configuration or artwork. All seven handlers remain trusted.
+- Recovered the actual current task through Steam Play: active worker/presence acknowledged in 753 ms. A duplicate current-task notification returned `{}` in 290 ms without creating another epoch.
+- After reloading VS Code, the user confirmed that a genuinely new task automatically restored the Steam playing status.
+- v0.1.1 contains the repair; the original v0.1.0 tag and attachments are retained as historical artifacts. Release attachments must come from the tagged GitHub Actions build.
+
 ## Local verification — 2026-11-08
 
 - Windows 10 22H2 x64: 35 isolated feature/configuration/transaction tests passed.
