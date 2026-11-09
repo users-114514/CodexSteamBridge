@@ -71,7 +71,8 @@ public static class ProcessTests
                   RedirectStandardOutput = true, RedirectStandardError = true }))
             {
                 var output = child.StandardOutput.ReadToEndAsync(); var error = child.StandardError.ReadToEndAsync();
-                child.StandardInput.Write(input); child.StandardInput.Close();
+                byte[] bytes = new UTF8Encoding(false).GetBytes(input);
+                child.StandardInput.BaseStream.Write(bytes, 0, bytes.Length); child.StandardInput.Close();
                 if (!child.WaitForExit(2500)) { child.Kill(); throw new Exception("hook command timed out"); }
                 Assert(output.Wait(500) && error.Wait(500), "worker retained hook output pipes");
                 Assert(child.ExitCode == 0 && output.Result.Trim() == "{}", "hook command did not finish cleanly");

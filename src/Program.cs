@@ -27,7 +27,11 @@ namespace CodexSteamBridge
                 if (mode == "event")
                 {
                     // Hooks must never block or steer a Codex task. Input is consumed in memory only.
-                    string input = Console.In.ReadToEnd();
+                    // Codex writes UTF-8 JSON, independently of the Windows
+                    // console/OEM code page. Preserve non-ASCII user paths.
+                    string input;
+                    using (var reader = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false, true), true))
+                        input = reader.ReadToEnd();
                     if (input.Length <= 4 * 1024 * 1024) runtime.Receive(Json.Parse(input));
                     Console.Write("{}"); return 0;
                 }

@@ -19,6 +19,7 @@ records or development fixtures may be included in the release archives.
 
 - Reproduced v0.1.0's notification input loss through the exact installed Windows PowerShell command; direct execution received the same input successfully.
 - Corrected the receiver executable type and worker handle inheritance. All 35 functional tests and six process checks passed, including both new regressions.
+- The first hosted build exposed a console-code-page mismatch in the notification regression. The harness now sends actual UTF-8 bytes and the receiver explicitly decodes UTF-8; the mismatch was reproduced locally before applying the fix.
 - Installed the local repair without changing hook definitions, trust records, Steam account configuration or artwork. All seven handlers remain trusted.
 - Recovered the actual current task through Steam Play: active worker/presence acknowledged in 753 ms. A duplicate current-task notification returned `{}` in 290 ms without creating another epoch.
 - After reloading VS Code, the user confirmed that a genuinely new task automatically restored the Steam playing status.
