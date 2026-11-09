@@ -1,0 +1,10 @@
+artifacts/
+dist/
+test-results/
+*.user
+*.suo
+*.log
+settings.json
+installation.json
+runtime/
+src/obj/

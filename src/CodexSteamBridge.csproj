@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <OutputType>WinExe</OutputType>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>CodexSteamBridge</AssemblyName>
+    <RootNamespace>CodexSteamBridge</RootNamespace>
+    <OutputPath>..\artifacts\vs\</OutputPath>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Optimize>true</Optimize>
+    <WarningLevel>4</WarningLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System"/><Reference Include="System.Core"/><Reference Include="System.Drawing"/>
+    <Reference Include="System.Windows.Forms"/><Reference Include="System.Web.Extensions"/><Reference Include="System.Xml"/>
+    <Compile Include="State.cs"/><Compile Include="Platform.cs"/><Compile Include="Runtime.cs"/>
+    <Compile Include="Vdf.cs"/><Compile Include="Install.cs"/><Compile Include="Manager.cs"/><Compile Include="Program.cs"/>
+    <None Include="app.manifest"/>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
+</Project>
