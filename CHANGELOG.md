@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.0 (experimental)
+
+- Add interactive CLI integration independent of VS Code, with executable and invocation checks.
+- Schema 3: multiple homes, per-client switches, scoped deduplication and compatibility errors.
+- Preserve legacy commands and trust; reset runtime state on upgrade. New homes require native review.
+- Follow execution-process identity across detached terminals; isolate broken sessions and continuations.
+- Expand CLI/profile, transactional install and real-process tests; exclude build outputs from source packages.
+
 ## 0.1.1 — 2026-11-09
 
 - Build the notification receiver as a console executable so the existing trusted Windows PowerShell command forwards Codex's JSON input; keep the manager and Steam presence as windowless GUI executables.

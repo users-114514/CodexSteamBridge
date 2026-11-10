@@ -18,7 +18,7 @@ namespace CodexSteamBridge
 
     public sealed class Settings
     {
-        public int SchemaVersion = 2;
+        public int SchemaVersion = 3;
         public bool Enabled = true;
         public string SteamExe = "";
         public string VSCodeExe = "";
@@ -26,6 +26,8 @@ namespace CodexSteamBridge
         public string CodexHome = "";
         public string Language = "zh-CN";
         public List<AccountConfig> Accounts = new List<AccountConfig>();
+        public string DefaultProfileId = "default";
+        public List<CodexProfile> CodexProfiles = new List<CodexProfile>();
     }
 
     public sealed class SessionInfo
@@ -35,7 +37,12 @@ namespace CodexSteamBridge
         public int OwnerPid;
         public long OwnerTicks;
         public long Offset;
+        public string ProfileId = "default";
+        public string Client = "";
+        public List<SessionReader> Previous = new List<SessionReader>();
     }
+    public sealed class SessionReader
+    { public string Transcript = ""; public long Offset; public int OwnerPid; public long OwnerTicks; }
 
     public sealed class TaskInfo
     {
@@ -45,6 +52,10 @@ namespace CodexSteamBridge
         public string Trigger = "";
         public bool Active = true;
         public List<string> Aliases = new List<string>();
+        public long AwaitStartUntil;
+        public int OwnerPid;
+        public long OwnerTicks;
+        public string Client = "";
     }
 
     public sealed class AgentInfo
@@ -60,7 +71,7 @@ namespace CodexSteamBridge
     // Only operational metadata is persisted. Never add prompts or message text here.
     public sealed class BridgeState
     {
-        public int SchemaVersion = 2;
+        public int SchemaVersion = 3;
         public string Phase = "idle";
         public string Reason = "idle";
         public long Epoch;
@@ -76,10 +87,13 @@ namespace CodexSteamBridge
         public string AccountId = "";
         public long DeadlineTicks;
         public bool LaunchRequested;
+        public string ActivationSessionId = "";
+        public string ActivationTurnId = "";
         public List<SessionInfo> Sessions = new List<SessionInfo>();
         public List<TaskInfo> Tasks = new List<TaskInfo>();
         public List<AgentInfo> Agents = new List<AgentInfo>();
         public List<string> Seen = new List<string>();
+        public List<ProfileIssue> Issues = new List<ProfileIssue>();
         public int ActiveCount { get { return Tasks.Count(t => t.Active) + Agents.Count(a => a.Active); } }
     }
 
@@ -231,14 +245,13 @@ namespace CodexSteamBridge
         {
             if (!File.Exists(StatePath)) return new BridgeState();
             var state = Json.Read<BridgeState>(StatePath);
-            if (state == null || state.SchemaVersion != 2) throw new InvalidDataException("Unsupported state version");
+            if (state == null || (state.SchemaVersion != 2 && state.SchemaVersion != 3)) throw new InvalidDataException("Unsupported state version");
             return state;
         }
         public Settings Settings()
         {
             var settings = Json.Read<Settings>(SettingsPath);
-            if (settings == null || settings.SchemaVersion != 2) throw new InvalidDataException("Unsupported configuration version");
-            return settings;
+            return Profiles.Normalize(settings);
         }
         public void Save(BridgeState state)
         {

@@ -6,8 +6,8 @@ using System.Runtime.Versioning;
 using System.Reflection;
 
 [assembly: AssemblyTitle("CodexSteamBridge")]
-[assembly: AssemblyVersion("0.1.1.0")]
-[assembly: AssemblyFileVersion("0.1.1.0")]
+[assembly: AssemblyVersion("0.2.0.0")]
+[assembly: AssemblyFileVersion("0.2.0.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace CodexSteamBridge
@@ -32,7 +32,10 @@ namespace CodexSteamBridge
                     string input;
                     using (var reader = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false, true), true))
                         input = reader.ReadToEnd();
-                    if (input.Length <= 4 * 1024 * 1024) runtime.Receive(Json.Parse(input));
+                    string profile;
+                    if (args.Length != 1 && !(args.Length == 3 && args[1] == "--profile")) { Console.Write("{}"); return 0; }
+                    profile = args.Length == 3 ? args[2] : "";
+                    if (input.Length <= 4 * 1024 * 1024) runtime.Receive(Json.Parse(input), profile);
                     Console.Write("{}"); return 0;
                 }
                 if (mode == "run") { runtime.Run(); return 0; }

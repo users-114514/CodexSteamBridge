@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -10,174 +11,164 @@ namespace CodexSteamBridge
 {
     public sealed class Manager : Form
     {
-        readonly Dictionary<string, TextBox> fields = new Dictionary<string, TextBox>();
-        readonly CheckedListBox accounts = new CheckedListBox { Dock = DockStyle.Fill, CheckOnClick = true, Height = 76 };
-        readonly Label status = new Label { AutoSize = true, MaximumSize = new Size(680, 0), Padding = new Padding(4) };
-        readonly ComboBox language = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-        readonly FlowLayoutPanel buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-        readonly TableLayoutPanel table = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 3, Padding = new Padding(14) };
+        readonly TextBox root = new TextBox(), steam = new TextBox(), editor = new TextBox();
+        readonly ComboBox language = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        readonly CheckedListBox accounts = new CheckedListBox { Dock = DockStyle.Fill, CheckOnClick = true };
+        readonly ListBox profiles = new ListBox { Dock = DockStyle.Fill };
+        readonly TextBox home = new TextBox(), extension = new TextBox(), cli = new TextBox();
+        readonly CheckBox enabled = new CheckBox(), useExtension = new CheckBox(), useCli = new CheckBox();
+        readonly Label status = new Label { AutoSize = true, MaximumSize = new Size(920, 0), Padding = new Padding(8) };
+        readonly FlowLayoutPanel actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
         readonly List<Control> translated = new List<Control>();
-        Settings detected;
-        bool busy;
-        bool trusted;
+        Settings draft;
+        CodexProfile selected;
+        bool loading, busy;
+        string trust = "";
         bool English { get { return language.SelectedIndex == 1; } }
         string T(string zh, string en) { return English ? en : zh; }
-        string Root { get { return fields["root"].Text.Trim(); } }
-        void Caption(Control control, string zh, string en) { control.Tag = new[] { zh, en }; translated.Add(control); control.Text = T(zh, en); }
-
+        void Texts(Control control, string zh, string en) { control.Tag = new[] { zh, en }; translated.Add(control); control.Text = T(zh, en); }
+        static TableLayoutPanel Table() { return new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 3, Padding = new Padding(10), AutoSize = true }; }
         public Manager()
         {
-            Text = "CodexSteamBridge 0.1.1 — Experimental"; MinimumSize = new Size(760, 650); Size = new Size(840, 720);
+            Text = "CodexSteamBridge 0.2.0 — Experimental"; MinimumSize = new Size(900, 740); Size = new Size(1000, 860);
             StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); AutoScaleMode = AutoScaleMode.Dpi;
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150)); table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 85)); Controls.Add(table);
-            language.Items.AddRange(new[] { "简体中文", "English" }); language.SelectedIndex = 0;
-            table.Controls.Add(new Label { Text = "Language / 语言", AutoSize = true }, 0, 0); table.Controls.Add(language, 1, 0);
-            language.SelectedIndexChanged += (s, e) => { foreach (var control in translated) { var names = (string[])control.Tag; control.Text = T(names[0], names[1]); } RefreshStatus(); };
-            AddPath("root", "安装目录", "Install directory", true, 1);
-            AddPath("steam", "Steam 程序", "Steam executable", false, 2);
-            AddPath("vscode", "VS Code 程序", "VS Code executable", false, 3);
-            AddPath("codex", "Codex 程序", "Codex executable", false, 4);
-            AddPath("home", "Codex 配置目录", "Codex home", true, 5);
-            var label = new Label { AutoSize = true }; Caption(label, "添加/修复所选账号", "Add/repair accounts"); table.Controls.Add(label, 0, 6); table.Controls.Add(accounts, 1, 6);
-            var scan = new Button { AutoSize = true }; Caption(scan, "识别", "Detect"); scan.Click += (s, e) => ScanAccounts(); table.Controls.Add(scan, 2, 6);
-            table.Controls.Add(buttons, 0, 7); table.SetColumnSpan(buttons, 3);
-            AddButton("安装 / 修复", "Install / repair", async () => await Install());
-            AddButton("检查状态", "Check status", async () => await CheckTrust());
-            AddButton("审核指引", "Review instructions", () =>
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 210)); Controls.Add(layout);
+            language.Items.AddRange(new[] { "简体中文", "English" }); language.SelectedIndex = 0; layout.Controls.Add(language, 0, 0);
+            language.SelectedIndexChanged += (s, e) => { foreach (var control in translated) { var text = (string[])control.Tag; control.Text = T(text[0], text[1]); } RefreshStatus(); };
+            var tabs = new TabControl { Dock = DockStyle.Fill }; layout.Controls.Add(tabs, 0, 1);
+            var general = new TabPage(); Texts(general, "安装与 Steam", "Installation and Steam"); tabs.TabPages.Add(general);
+            var common = Table(); general.Controls.Add(common);
+            PathRow(common, 0, "安装目录", "Install directory", root, true);
+            PathRow(common, 1, "Steam 程序", "Steam executable", steam, false);
+            PathRow(common, 2, "VS Code（可选）", "VS Code (optional)", editor, false);
+            var accountLabel = new Label { AutoSize = true }; Texts(accountLabel, "添加／修复所选账号", "Add / repair accounts"); common.Controls.Add(accountLabel, 0, 3); common.Controls.Add(accounts, 1, 3);
+            var scan = new Button { AutoSize = true }; Texts(scan, "识别账号", "Detect accounts"); common.Controls.Add(scan, 2, 3); scan.Click += (s, e) => ScanAccounts();
+            var profileTab = new TabPage(); Texts(profileTab, "Codex 配置目录", "Codex profiles"); tabs.TabPages.Add(profileTab);
+            var split = new SplitContainer { Size = new Size(940, 500), Dock = DockStyle.Fill, SplitterDistance = 220 }; profileTab.Controls.Add(split);
+            var profileList = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+            profileList.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); profileList.RowStyles.Add(new RowStyle(SizeType.AutoSize)); split.Panel1.Controls.Add(profileList); profileList.Controls.Add(profiles, 0, 0);
+            var profileActions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill }; profileList.Controls.Add(profileActions, 0, 1);
+            var add = new Button { AutoSize = true }; Texts(add, "添加", "Add"); profileActions.Controls.Add(add);
+            var remove = new Button { AutoSize = true }; Texts(remove, "移除", "Remove"); profileActions.Controls.Add(remove);
+            add.Click += (s, e) => { SaveProfile(); var p = new CodexProfile { Id = Guid.NewGuid().ToString("N"), ExtensionExe = Discovery.CodexExe(), CliEntry = CliDiscovery.Detect() }; p.ExtensionEnabled = File.Exists(p.ExtensionExe); p.CliEnabled = p.CliEntry.Length != 0; draft.CodexProfiles.Add(p); ReloadProfiles(p.Id); };
+            remove.Click += (s, e) => { if (selected == null) return; var id = selected.Id; draft.CodexProfiles.RemoveAll(p => p.Id == id); selected = null; ReloadProfiles(""); };
+            var detail = Table(); split.Panel2.Controls.Add(detail);
+            PathRow(detail, 0, "配置目录", "Codex home", home, true); PathRow(detail, 1, "扩展 Codex 程序", "Extension executable", extension, false);
+            PathRow(detail, 2, "CLI 启动入口", "CLI entry", cli, false);
+            Texts(enabled, "启用此目录", "Enable profile"); Texts(useExtension, "联动 VS Code 扩展", "Enable VS Code integration"); Texts(useCli, "联动交互式 CLI", "Enable interactive CLI integration");
+            detail.Controls.Add(enabled, 1, 3); detail.Controls.Add(useExtension, 1, 4); detail.Controls.Add(useCli, 1, 5);
+            var detect = new Button { AutoSize = true }; Texts(detect, "识别客户端", "Detect clients"); detail.Controls.Add(detect, 1, 6);
+            detect.Click += (s, e) => { extension.Text = Discovery.CodexExe(); cli.Text = CliDiscovery.Detect(); useExtension.Checked = File.Exists(extension.Text); useCli.Checked = cli.Text.Length != 0; };
+            var hint = new Label { AutoSize = true, MaximumSize = new Size(560, 0) }; Texts(hint, "目录与开关修改后，点击“安装 / 修复”保存。新目录须在 CLI /hooks 或扩展界面审核 7 项通知；随后重新启动 CLI 或重新加载 VS Code。", "Choose Install / repair to save profile changes. Review seven handlers in CLI /hooks or the extension, then restart CLI or reload VS Code."); detail.Controls.Add(hint, 1, 7);
+            profiles.SelectedIndexChanged += (s, e) => { if (loading) return; SaveProfile(); selected = profiles.SelectedIndex >= 0 ? draft.CodexProfiles[profiles.SelectedIndex] : null; ShowProfile(); };
+            layout.Controls.Add(actions, 0, 2); var statusPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true }; statusPanel.Controls.Add(status); layout.Controls.Add(statusPanel, 0, 3);
+            Button("安装 / 修复", "Install / repair", async () => { var settings = Read(); string target = root.Text.Trim(); var chosen = accounts.CheckedItems.Cast<string>().ToArray(); await Task.Run(() => Installer.Install(BridgeRuntime.ExecutableRoot, target, settings, chosen)); draft = new StateStore(target).Settings(); ReloadProfiles(draft.DefaultProfileId); MessageBox.Show(this, T("安装完成。请审核新增通知并重启 CLI 会话或重新加载 VS Code，再提交新任务。", "Installed. Review new hooks, restart CLI or reload VS Code, then submit a new task.")); await CheckTrust(); });
+            Button("检查状态", "Check status", CheckTrust);
+            Button("审核指引", "Review instructions", () => { MessageBox.Show(this, T("在目标 Codex 配置目录对应的 CLI 会话输入 /hooks，或在 VS Code Codex 中选择“审核钩子”，核对本工具的 7 项通知后信任；工具不会代替授权。", "Use /hooks in the CLI for the selected Codex home, or Review hooks in VS Code. Review and trust this tool's seven handlers. The tool never grants trust.")); return Task.FromResult(0); });
+            Button("启用 / 停用", "Enable / disable", () => { var store = new StateStore(root.Text.Trim()); var settings = store.Settings(); settings.Enabled = !settings.Enabled; var mutex = store.Lock(); try { Json.Write(store.SettingsPath, settings); if (!settings.Enabled) { var state = store.Load(); Lifecycle.Stop(state, "disabled"); store.Save(state); } } finally { StateStore.Unlock(mutex); } draft.Enabled = settings.Enabled; RefreshStatus(); return Task.FromResult(0); });
+            Button("卸载", "Uninstall", async () => { if (MessageBox.Show(this, T("请自行关闭 Steam。将移除本工具在所有登记目录中的配置及库条目，保留其他配置和自定义文件。继续？", "Close Steam first. Remove this tool's integration from all registered homes and Steam accounts, preserving unrelated files?"), Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return; string target = root.Text.Trim(); await Task.Run(() => Installer.Uninstall(target)); MessageBox.Show(this, T("卸载完成，关闭窗口后清理程序文件。", "Uninstalled. Close this window to remove owned program files.")); Close(); });
+            draft = Discovery.Detect(); string current = BridgeRuntime.ExecutableRoot;
+            root.Text = File.Exists(Path.Combine(current, "settings.json")) ? current : Discovery.DefaultRoot;
+            if (!File.Exists(Path.Combine(root.Text, "settings.json")) && File.Exists(draft.SteamExe))
+            { string legacy = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(draft.SteamExe), "..", "CodexSteamBridge")); if (File.Exists(Path.Combine(legacy, "settings.json"))) root.Text = legacy; }
+            bool migrating = true;
+            if (File.Exists(Path.Combine(root.Text, "settings.json")))
             {
-                var settings = ReadFields();
-                if (!File.Exists(settings.VSCodeExe)) throw new IOException(T("未找到 VS Code", "VS Code not found"));
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(settings.VSCodeExe) { UseShellExecute = true });
-                MessageBox.Show(this, T("在 VS Code 的 Codex 输入区点击“审核钩子 / Review hooks”，核对并信任本工具的 7 项通知入口，然后返回点击“检查状态”。", "In the Codex composer, select Review hooks and trust this tool's seven handlers, then return and select Check status."));
-                return Task.FromResult(0);
-            });
-            AddButton("启用 / 停用", "Enable / disable", () =>
-            {
-                var store = new StateStore(Root); var settings = store.Settings(); settings.Enabled = !settings.Enabled; Json.Write(store.SettingsPath, settings);
-                if (!settings.Enabled)
-                {
-                    var mutex = store.Lock();
-                    try { var state = store.Load(); Lifecycle.Stop(state, "disabled"); store.Save(state); }
-                    finally { StateStore.Unlock(mutex); }
-                }
-                RefreshStatus(); return Task.FromResult(0);
-            });
-            AddButton("卸载", "Uninstall", async () =>
-            {
-                if (MessageBox.Show(this, T("请先关闭 Steam。卸载将移除本工具配置和库条目，并保留其他程序及自定义文件。继续？", "Close Steam first. Remove this tool's integration and library entries, preserving other programs and custom files?"), Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-                await Task.Run(() => Installer.Uninstall(Root));
-                MessageBox.Show(this, T("卸载完成；关闭此窗口后删除程序文件。", "Uninstalled. Owned program files will be removed after this window closes.")); Close();
-            });
-            table.Controls.Add(status, 0, 8); table.SetColumnSpan(status, 3);
-            var policy = new Label { AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(4, 12, 4, 4) };
-            Caption(policy, "按需启动：仅新任务或 Steam“开始游戏”触发。Steam 未安装或未运行时直接退出；已运行但未登录时最多等待 60 秒。无日志、无遥测、无开机自启。", "On demand: a new task or Steam Play triggers integration. Missing/stopped Steam ends the attempt. Running but signed-out Steam is given 60 seconds. No logs, telemetry or login startup."); table.Controls.Add(policy, 0, 9); table.SetColumnSpan(policy, 3);
-            detected = Discovery.Detect();
-            string current = BridgeRuntime.ExecutableRoot;
-            string candidate = File.Exists(Path.Combine(current, "settings.json")) ? current : Discovery.DefaultRoot;
-            if (!File.Exists(Path.Combine(candidate, "settings.json")) && File.Exists(detected.SteamExe))
-            {
-                string legacy = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(detected.SteamExe), "..", "CodexSteamBridge"));
-                if (File.Exists(Path.Combine(legacy, "settings.json"))) candidate = legacy;
+                try { migrating = Json.Str(Json.Parse(File.ReadAllText(Path.Combine(root.Text, "settings.json"))), "SchemaVersion") == "2"; draft = new StateStore(root.Text).Settings(); }
+                catch (IOException) { } catch (ArgumentException) { }
             }
-            fields["root"].Text = candidate;
-            if (File.Exists(Path.Combine(candidate, "settings.json")))
-            {
-                try
-                {
-                    var data = Json.Parse(File.ReadAllText(Path.Combine(candidate, "settings.json")));
-                    if (Json.Str(data, "SchemaVersion") == "2") detected = Json.Read<Settings>(Path.Combine(candidate, "settings.json"));
-                    else if (File.Exists(Json.Str(data, "SteamExe"))) detected.SteamExe = Json.Str(data, "SteamExe");
-                }
-                catch { }
-            }
-            fields["steam"].Text = detected.SteamExe; fields["vscode"].Text = detected.VSCodeExe;
-            fields["codex"].Text = detected.CodexExe; fields["home"].Text = detected.CodexHome;
-            if (detected.Language == "en") language.SelectedIndex = 1;
-            ScanAccounts(); RefreshStatus();
+            Profiles.Normalize(draft);
+            if (migrating && draft.CodexProfiles.Count != 0) { var p = draft.CodexProfiles[0]; p.CliEntry = CliDiscovery.Detect(); p.CliEnabled = p.CliEntry.Length != 0; }
+            steam.Text = draft.SteamExe; editor.Text = draft.VSCodeExe; language.SelectedIndex = draft.Language == "en" ? 1 : 0;
+            ReloadProfiles(draft.DefaultProfileId); ScanAccounts(); RefreshStatus();
         }
-        void AddPath(string key, string zh, string en, bool folder, int row)
+        void PathRow(TableLayoutPanel table, int row, string zh, string en, TextBox field, bool folder)
         {
-            var label = new Label { AutoSize = true, Anchor = AnchorStyles.Left }; Caption(label, zh, en); table.Controls.Add(label, 0, row);
-            var input = new TextBox { Dock = DockStyle.Fill }; fields[key] = input; table.Controls.Add(input, 1, row);
-            var browse = new Button { AutoSize = true }; Caption(browse, "选择", "Browse"); table.Controls.Add(browse, 2, row);
-            browse.Click += (s, e) =>
-            {
-                if (folder) { using (var dialog = new FolderBrowserDialog()) { dialog.SelectedPath = input.Text; if (dialog.ShowDialog(this) == DialogResult.OK) input.Text = dialog.SelectedPath; } }
-                else { using (var dialog = new OpenFileDialog { Filter = "Windows executable (*.exe)|*.exe", FileName = input.Text }) if (dialog.ShowDialog(this) == DialogResult.OK) input.Text = dialog.FileName; }
-            };
+            table.ColumnStyles.Clear(); table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145)); table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 75));
+            var label = new Label { AutoSize = true }; Texts(label, zh, en); table.Controls.Add(label, 0, row); field.Dock = DockStyle.Fill; table.Controls.Add(field, 1, row);
+            var browse = new Button { AutoSize = true }; Texts(browse, "选择", "Browse"); table.Controls.Add(browse, 2, row);
+            browse.Click += (s, e) => { if (folder) { using (var dialog = new FolderBrowserDialog { SelectedPath = field.Text }) if (dialog.ShowDialog(this) == DialogResult.OK) field.Text = dialog.SelectedPath; } else { using (var dialog = new OpenFileDialog { Filter = "Program (*.exe;*.cmd;*.ps1)|*.exe;*.cmd;*.ps1|All files (*.*)|*.*", FileName = field.Text }) if (dialog.ShowDialog(this) == DialogResult.OK) field.Text = dialog.FileName; } };
         }
-        void AddButton(string zh, string en, Func<Task> action)
+        void Button(string zh, string en, Func<Task> action)
         {
-            var button = new Button { AutoSize = true, Margin = new Padding(4, 12, 4, 4) }; Caption(button, zh, en); buttons.Controls.Add(button);
-            button.Click += async (s, e) =>
-            {
-                if (busy) return; busy = true; buttons.Enabled = false;
-                try { await action(); }
-                catch (Exception error) { MessageBox.Show(this, error.Message == "steam_must_close" ? T("请先自行关闭 Steam，再点击安装、修复或卸载；本工具不会关闭或重启 Steam。", "Close Steam yourself, then retry. This tool does not close or restart Steam.") : error.Message, Text); }
-                finally { busy = false; if (!IsDisposed) buttons.Enabled = true; }
-            };
+            var button = new Button { AutoSize = true }; Texts(button, zh, en); actions.Controls.Add(button);
+            button.Click += async (s, e) => { if (busy) return; busy = true; actions.Enabled = false;
+                try { await action(); } catch (Exception error) { MessageBox.Show(this, error.Message == "steam_must_close" ? T("请先自行关闭 Steam，再安装、修复或卸载。", "Close Steam before changing the library or uninstalling.") : error.Message, Text); }
+                finally { busy = false; if (!IsDisposed) actions.Enabled = true; } };
         }
-        Settings ReadFields()
+        void SaveProfile()
         {
-            var settings = new Settings { SteamExe = fields["steam"].Text.Trim(), VSCodeExe = fields["vscode"].Text.Trim(),
-                CodexExe = fields["codex"].Text.Trim(), CodexHome = fields["home"].Text.Trim(), Language = English ? "en" : "zh-CN" };
-            if (File.Exists(Path.Combine(Root, "settings.json")))
-            { try { var previous = new StateStore(Root).Settings(); settings.Accounts = previous.Accounts; settings.Enabled = previous.Enabled; } catch { } }
-            return settings;
+            if (selected == null) return;
+            selected.CodexHome = home.Text.Trim(); selected.ExtensionExe = extension.Text.Trim(); selected.CliEntry = cli.Text.Trim();
+            selected.Enabled = enabled.Checked; selected.ExtensionEnabled = useExtension.Checked; selected.CliEnabled = useCli.Checked;
+            int index = draft.CodexProfiles.IndexOf(selected);
+            if (index >= 0 && index < profiles.Items.Count)
+            { loading = true; profiles.Items[index] = selected.CodexHome.Length == 0 ? T("新配置目录", "New profile") : selected.CodexHome; loading = false; }
         }
+        void ShowProfile()
+        {
+            home.Text = selected == null ? "" : selected.CodexHome; extension.Text = selected == null ? "" : selected.ExtensionExe; cli.Text = selected == null ? "" : selected.CliEntry;
+            enabled.Checked = selected != null && selected.Enabled; useExtension.Checked = selected != null && selected.ExtensionEnabled; useCli.Checked = selected != null && selected.CliEnabled;
+        }
+        void ReloadProfiles(string id)
+        {
+            loading = true; profiles.Items.Clear();
+            foreach (var profile in draft.CodexProfiles) profiles.Items.Add(profile.CodexHome.Length == 0 ? T("新配置目录", "New profile") : profile.CodexHome);
+            int index = draft.CodexProfiles.FindIndex(p => p.Id == id); profiles.SelectedIndex = index >= 0 ? index : profiles.Items.Count > 0 ? 0 : -1;
+            selected = profiles.SelectedIndex < 0 ? null : draft.CodexProfiles[profiles.SelectedIndex]; ShowProfile(); loading = false;
+        }
+        Settings Read()
+        { SaveProfile(); draft.SteamExe = steam.Text.Trim(); draft.VSCodeExe = editor.Text.Trim(); draft.Language = English ? "en" : "zh-CN"; return draft; }
         void ScanAccounts()
         {
-            accounts.Items.Clear();
-            var settings = ReadFields(); string active = SteamPlatform.Inspect(settings).AccountId;
+            accounts.Items.Clear(); var settings = Read(); string active = SteamPlatform.Inspect(settings).AccountId;
             foreach (string account in Discovery.Accounts(settings.SteamExe)) accounts.Items.Add(account, account == active || settings.Accounts.Any(a => a.AccountId == account));
             if (accounts.CheckedItems.Count == 0 && accounts.Items.Count > 0) accounts.SetItemChecked(0, true);
         }
-        async Task Install()
-        {
-            var settings = ReadFields(); string root = Root; var selected = accounts.CheckedItems.Cast<string>().ToArray();
-            await Task.Run(() => Installer.Install(BridgeRuntime.ExecutableRoot, root, settings, selected));
-            MessageBox.Show(this, T("安装完成。首次安装或通知定义变更后，请在 Codex 中审核钩子，并重新加载已有 VS Code 窗口；随后提交新任务。", "Installed. Review changed hooks in Codex and reload existing VS Code windows, then submit a new task."));
-            await CheckTrust();
-        }
         async Task CheckTrust()
         {
-            var root = Root; var store = new StateStore(root); var settings = store.Settings();
-            var hooks = await Task.Run(() => TrustProbe.Inspect(settings, root));
-            trusted = hooks.Count == 7 && hooks.All(h => Json.Str(h, "trustStatus") == "trusted" && Json.Str(h, "enabled").Equals("True", StringComparison.OrdinalIgnoreCase));
-            string manifestPath = Path.Combine(root, "installation.json");
-            if (File.Exists(manifestPath)) { var manifest = Json.Read<Installation>(manifestPath); manifest.HookKeys = hooks.Select(h => Json.Str(h, "key")).ToList(); Json.Write(manifestPath, manifest); }
-            RefreshStatus();
+            string target = root.Text.Trim(); var settings = new StateStore(target).Settings(); var lines = new List<string>();
+            foreach (var profile in settings.CodexProfiles)
+            {
+                foreach (string kind in new[] { "vscode", "cli" })
+                {
+                    if (!(kind == "cli" ? profile.CliEnabled : profile.ExtensionEnabled)) continue;
+                    string exe = kind == "cli" ? CliDiscovery.Resolve(profile.CliEntry) : profile.ExtensionExe;
+                    try
+                    {
+                        var hooks = await Task.Run(() => TrustProbe.Inspect(exe, profile.CodexHome, target));
+                        bool ready = hooks.Count == 7 && hooks.All(h => Json.Str(h, "trustStatus") == "trusted" && Json.Str(h, "enabled").Equals("True", StringComparison.OrdinalIgnoreCase));
+                        lines.Add(profile.CodexHome + " / " + kind + ": " + (ready ? T("审核通过", "trusted") : T("需要审核通知", "review hooks")));
+                    }
+                    catch (Exception error) { lines.Add(profile.CodexHome + " / " + kind + ": " + error.Message); }
+                }
+            }
+            trust = string.Join("\n", lines); RefreshStatus();
         }
         void RefreshStatus()
         {
             try
             {
-                var store = new StateStore(Root);
-                if (!File.Exists(store.SettingsPath)) { status.Text = T("尚未安装。选择账号后点击安装。", "Not installed. Select an account and install."); return; }
-                var settings = store.Settings(); BridgeState state;
-                var mutex = store.Lock();
-                try
+                var store = new StateStore(root.Text.Trim()); if (!File.Exists(store.SettingsPath)) { status.Text = T("尚未安装。配置客户端及账号后点击安装。", "Not installed. Configure clients/accounts, then install."); return; }
+                var settings = store.Settings(); var state = store.Load();
+                status.Text = T("联动：", "Integration: ") + (settings.Enabled ? T("启用", "enabled") : T("停用", "disabled")) + " / " + Reason(state.Reason, English) + "\n";
+                foreach (var profile in settings.CodexProfiles)
                 {
-                    state = store.Load();
-                    if (!ProcessStamp.Alive(state.WorkerPid, state.WorkerTicks))
-                    {
-                        try { TranscriptAdapter.Reconcile(state); }
-                        catch (InvalidDataException) { Lifecycle.Stop(state, "unsupported_transcript"); }
-                        catch (IOException) { Lifecycle.Stop(state, "transcript_unavailable"); }
-                        if (state.Desired) Lifecycle.Stop(state, "runtime_stopped");
-                        store.Save(state);
-                    }
+                    int count = state.Tasks.Count(t => t.Active && t.SessionId.StartsWith(profile.Id + ":", StringComparison.Ordinal));
+                    var issue = state.Issues.FirstOrDefault(i => i.ProfileId == profile.Id);
+                    status.Text += profile.CodexHome + " — " + (profile.Enabled ? T("启用", "enabled") : T("停用", "disabled")) + " / " + T("活动任务：", "active tasks: ") + count +
+                        " / VS Code: " + (File.Exists(profile.ExtensionExe) ? T("已找到", "found") : T("未找到", "missing")) + " / CLI: " + (CliDiscovery.Resolve(profile.CliEntry).Length != 0 ? T("已找到", "found") : T("未找到", "missing")) +
+                        (issue == null ? "" : " / " + Reason(issue.Reason, English)) + "\n";
                 }
-                finally { StateStore.Unlock(mutex); }
-                status.Text = T("联动：", "Integration: ") + (settings.Enabled ? T("已启用", "enabled") : T("已停用", "disabled")) +
-                    "\n" + (trusted ? T("Codex 通知：审核通过", "Codex handlers: trusted") : T("Codex 通知：请点击检查状态，确认审核", "Codex handlers: select Check status to verify trust")) +
-                    "\n" + T("当前状态：", "Current state: ") + Reason(state.Reason, English) + T("；活动项：", "; active items: ") + state.ActiveCount;
+                status.Text += trust.Length == 0 ? T("点击“检查状态”核对各客户端通知授权。", "Select Check status to verify each client's hook trust.") : trust;
             }
-            catch { status.Text = T("检测到旧版或未完成配置，请安装 / 修复。", "Legacy or incomplete configuration. Install / repair required."); }
+            catch { status.Text = T("旧版或未完成配置，请安装 / 修复。", "Legacy/incomplete installation. Choose Install / repair."); }
         }
         public static string Reason(string code, bool en)
         {
-            var zh = new Dictionary<string, string> { { "idle", "空闲" }, { "active", "正在联动" }, { "waiting_new_task", "等待下一次新任务" }, { "steam_missing", "未安装 Steam，本次已退出" }, { "steam_not_running", "Steam 未运行，本次已退出" }, { "account_not_configured", "当前 Steam 账号尚未配置" }, { "waiting_presence", "等待 Steam 状态程序启动" }, { "login_timeout", "等待登录 60 秒超时，已退出" }, { "launch_timeout", "启动确认 10 秒超时，已退出" }, { "presence_stopped", "状态程序停止，等待新任务" }, { "account_changed", "Steam 账号已变更，等待新任务" }, { "steam_restarted", "Steam 进程已变更，等待新任务" }, { "disabled", "已停用" }, { "unsupported_transcript", "任务记录格式不受支持" }, { "transcript_unavailable", "任务记录不可用" }, { "runtime_failed", "运行异常，等待新任务" }, { "launch_failed", "Steam 状态程序启动失败" } };
+            var zh = new Dictionary<string, string> { { "idle", "空闲" }, { "active", "正在联动" }, { "waiting_new_task", "等待下一次新任务" }, { "steam_missing", "Steam 未安装，本次退出" }, { "steam_not_running", "Steam 未运行，本次退出" }, { "waiting_login", "等待 Steam 登录，最多 60 秒" }, { "account_not_configured", "账号未配置" }, { "waiting_presence", "等待 Steam 状态启动" }, { "login_timeout", "等待登录超时" }, { "launch_timeout", "启动确认超时" }, { "presence_stopped", "手动停止，等待新任务" }, { "unsupported_source", "会话来源不受支持" }, { "unsupported_transcript", "任务记录格式不受支持" }, { "transcript_unavailable", "任务记录不可用" }, { "missing_task_start", "任务开始信息不可用" } };
             string value; return !en && zh.TryGetValue(code, out value) ? value : code.Replace('_', ' ');
         }
     }

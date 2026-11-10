@@ -1,5 +1,14 @@
 # Release verification
 
+## v0.2.0 local verification — 2026-11-10
+
+- Original 35 functional tests and six process checks pass. Added 12 CLI/profile groups and a real fixture process scenario covering detached execution, no-daemon, two homes sharing one worker, UTF-8/spaced paths, pipe release under three seconds, owner crash isolation and last-task exit under two seconds.
+- Installed schema 3 locally. Existing seven hook commands and config.toml trust bytes remained identical; shortcut/account/artwork settings are retained. Upgrade starts no work.
+- Used the installed standalone CLI 0.167.0 (default startup) and an official npm native CLI 0.163.0 (`--no-daemon`) for real first-task Steam smoke tests. Both started the configured presence process and returned to idle on completion. The downloaded binary is an ignored development fixture, not redistributed.
+- CLI 0.163.0 also resumed the 0.167.0 smoke conversation with a new user task, then forked it with another task. Both created a new presence activation and returned to idle on completion.
+- Pending manual matrix: full real shared-daemon/native terminal-close interactions per version, resume/fork selection and approval flows, Windows 11 desktop, actual NVM switches, standard-user desktop installation, Steam exit races and friend-side latency. Isolated tests are not claims that these manual cases passed.
+- Release requires clean-source rebuild, green main/tag Actions runs, and downloaded attachment hash verification.
+
 The package is an experimental local build until a GitHub Actions run and the
 additional OS checks below have actually completed. Passing a unit test is not
 evidence of a live Steam friend-list update on another machine.

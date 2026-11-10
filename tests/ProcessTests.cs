@@ -78,7 +78,7 @@ public static class ProcessTests
                 Assert(child.ExitCode == 0 && output.Result.Trim() == "{}", "hook command did not finish cleanly");
             }
             var state = store.Load();
-            Assert(state.ActiveCount == 1 && state.Tasks[0].TurnId == "stdin-turn", "PowerShell lost hook stdin");
+            Assert(state.ActiveCount == 1 && state.Tasks[0].TurnId == "stdin-turn", "PowerShell lost hook stdin: " + Json.Serializer().Serialize(state));
             if (!File.Exists(Path.Combine(root, "steam.exe")))
                 Assert(state.Reason == "steam_missing" && state.WorkerPid == 0, "hook launched worker without Steam");
             else
@@ -103,7 +103,9 @@ public static class ProcessTests
         string self = System.Reflection.Assembly.GetExecutingAssembly().Location;
         File.Copy(self, Path.Combine(root, "Code.exe")); File.Copy(self, Path.Combine(root, "codex.exe"));
         string home = Path.Combine(root, "home"), sessions = Path.Combine(home, "sessions"); Directory.CreateDirectory(sessions);
-        File.WriteAllText(Path.Combine(sessions, "fixture.jsonl"), "", new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(sessions, "fixture.jsonl"),
+            "{\"type\":\"session_meta\",\"payload\":{\"source\":\"vscode\"}}\n" +
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"stdin-turn\",\"turn_attribution\":{\"turn_trigger\":\"composer\"}}}\n", new UTF8Encoding(false));
         Process steam = null;
         try
         {
@@ -114,7 +116,7 @@ public static class ProcessTests
                     { UseShellExecute = false, CreateNoWindow = true });
             }
             Json.Write(Path.Combine(root, "settings.json"), new Settings {
-                SteamExe = Path.Combine(root, runningSteam ? "steam.exe" : "absent-steam.exe"), CodexHome = home });
+                SchemaVersion = 2, SteamExe = Path.Combine(root, runningSteam ? "steam.exe" : "absent-steam.exe"), CodexHome = home, CodexExe = Path.Combine(root, "codex.exe") });
             using (var host = Process.Start(new ProcessStartInfo(Path.Combine(root, "Code.exe"), "--hook-host \"" + root + "\"")
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }))
             {
@@ -135,7 +137,7 @@ public static class ProcessTests
             if (args.Length == 2 && (args[0] == "--hook-host" || args[0] == "--hook-codex" || args[0] == "--hook-steam")) return HookHost(args[0], args[1]);
             var source = args[0]; string fixtures = args[1]; Directory.CreateDirectory(fixtures);
             HookInput(source, fixtures, false); HookInput(source, fixtures, true);
-            var missing = Prepare(source, Path.Combine(fixtures, "missing"), new Settings { SteamExe = Path.Combine(fixtures, "absent-steam.exe") });
+            var missing = Prepare(source, Path.Combine(fixtures, "missing"), new Settings { SchemaVersion = 2, SteamExe = Path.Combine(fixtures, "absent-steam.exe") });
             using (var presence = Presence(missing, "1")) Assert(presence.WaitForExit(2000), "missing Steam kept presence alive");
             var state = missing.Load(); Assert(state.WorkerPid == 0, "missing Steam started worker");
             Console.WriteLine("PASS real process: missing Steam exits without worker");

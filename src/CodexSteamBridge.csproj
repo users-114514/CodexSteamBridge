@@ -17,7 +17,7 @@
   <ItemGroup>
     <Reference Include="System"/><Reference Include="System.Core"/><Reference Include="System.Drawing"/>
     <Reference Include="System.Windows.Forms"/><Reference Include="System.Web.Extensions"/><Reference Include="System.Xml"/>
-    <Compile Include="State.cs"/><Compile Include="Platform.cs"/><Compile Include="Runtime.cs"/>
+    <Compile Include="State.cs"/><Compile Include="Profiles.cs"/><Compile Include="Platform.cs"/><Compile Include="Runtime.cs"/>
     <Compile Include="Vdf.cs"/><Compile Include="Install.cs"/><Compile Include="Manager.cs"/><Compile Include="Program.cs"/>
     <None Include="app.manifest"/>
   </ItemGroup>

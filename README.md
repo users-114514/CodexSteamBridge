@@ -1,44 +1,50 @@
 # CodexSteamBridge
 
-[English](README.en.md) · Windows x64 · v0.1.1 实验版 · MIT
+[English](README.en.md) · Windows x64 · v0.2.0 实验版 · MIT
 
-[下载 Windows 程序包](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.1.1/CodexSteamBridge-v0.1.1-windows-x64.zip) · [发布说明与校验值](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.1.1)
+[下载 Windows 程序包](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.2.0/CodexSteamBridge-v0.2.0-windows-x64.zip) · [发布说明与 SHA-256](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.2.0)
 
-在本机 VS Code 的 Codex 执行任务时，使用 Steam 非 Steam 游戏条目显示“正在玩 Codex”，所有任务结束后退出状态程序。
+本机 Codex CLI 或 VS Code Codex 执行任务时，在 Steam 显示“正在玩 Codex”；全部任务结束后退出状态程序。CLI 可独立使用，无需安装 VS Code。
 
-## 安装
+## 安装与升级
 
-1. 下载发行包并解压，双击 `CodexSteamBridge.exe`。默认安装到当前用户的 `%LOCALAPPDATA%\Programs\CodexSteamBridge`，可更改路径。首次安装、修改库条目或卸载前，请自行关闭 Steam；程序不会关闭或重启 Steam，也不会恢复启动其他游戏。
-2. 检查自动识别的程序、Codex 配置目录和 Steam 账号，点击“安装 / 修复”。已有本工具安装会被识别并原地升级，保留现有库条目编号、名称和图片。
-3. 在 VS Code 的 Codex 中选择“审核钩子 / Review hooks”，信任本工具的 7 个通知入口；重新加载已打开的 VS Code 窗口，返回管理界面点击“检查状态”，再提交新任务。程序不会代替用户信任通知入口。
+1. 解压 Windows 程序包，双击 `CodexSteamBridge.exe`。默认按当前用户安装到 `%LOCALAPPDATA%\Programs\CodexSteamBridge`。首次创建、修改 Steam 库条目及卸载前，请自行关闭 Steam；工具不会关闭或重启 Steam。
+2. 检查 Steam、账号和“Codex 配置目录”。可添加多个目录，分别配置扩展程序和 CLI 入口、启用或停用客户端；点击“安装 / 修复”统一保存。CLI 入口可选择 `codex.exe` 或 npm / NVM 的 `codex.cmd`、`codex.ps1`。
+3. 在对应目录的 CLI 输入 `/hooks`，或在扩展原生界面“审核钩子 / Review hooks”，审核本工具的 7 项通知；重启 CLI 会话或重新加载 VS Code，再点击“检查状态”确认授权并提交任务。工具不会代替授权。
 
-“钩子”是 Codex 在提交、结束、取消任务时调用的本地通知命令。不需要 OpenAI API 密钥，不修改项目代码。
+通知 = Codex 在提交、结束、取消任务时调用的本地命令。无需额外 API 密钥；Codex 本身须正常登录和工作。
 
-从 v0.1.0 升级：解压 v0.1.1，运行新包中的 `CodexSteamBridge.exe`，选择原安装目录并点击“安装 / 修复”；完成后在 VS Code 执行“开发人员：重新加载窗口”，再提交新任务。升级保留账号、库条目、图片及未变更通知的原有授权；可在管理界面点击“检查状态”确认。
+从 v0.1.1 升级：运行新包，选择原安装目录并点击“安装 / 修复”。旧目录迁入默认配置，原无参数 `event` 命令及未变更的授权保留，账号、库条目和图片保留；清除旧运行状态，等待下一次新任务。新增目录使用 `event --profile <编号>`，须另行原生审核。多目录配置变更失败会整体回滚文件。
 
 ## 启停规则
 
-| 情况 | 行为 |
+| 场景 | 行为 |
 | --- | --- |
-| Windows 登录、打开编辑器或 Codex 面板 | 无后台自启 |
-| 新任务，Steam 已运行且账号已配置 | 单次静默启动，无“打开游戏”弹窗 |
-| Steam 未安装、未运行、账号未配置 | 直接退出；本任务无重试、无后台探查，下次新任务重新检查 |
-| Steam 已运行但未登录 | 等待最多 60 秒；任务提前结束即退出 |
-| 全部任务结束、取消、失败 | 状态程序及任务后台退出 |
-| 手动停止、工具崩溃、Steam 重启或切换账号 | 本次不自动恢复，下次新任务再检查 |
-| Steam 中点击“开始游戏” | 有当前任务则恢复联动，无任务则退出；不打开 VS Code、不创建任务 |
+| 登录电脑、打开编辑器、终端或 CLI、选择旧会话、等待下一条输入 | 不启动联动后台 |
+| 交互式 `codex`、`codex resume`、`codex fork` 中提交新任务 | Steam 已运行且账号已配置时，单次静默启动 |
+| 等待审批或用户回答 | 任务未结束，保持联动 |
+| 关闭终端 | 实际执行进程仍工作时继续；执行进程退出后结束该进程的任务 |
+| 多窗口、CLI 与扩展、多配置目录并发 | 共享一个工具任务后台和一个 Steam 状态进程 |
+| 全部任务完成、取消或失败 | 结束状态并退出后台 |
+| Steam 未安装或未运行 | 直接退出，不启动 Steam；本任务不重试、空闲不探查 |
+| Steam 已运行但未登录 | 最多等待 60 秒；任务提前完成即退出 |
+| 账号未配置、Steam 关闭、重启、退出登录或切换账号 | 退出本次联动，下次新任务重新检查 |
+| 手动停止或工具崩溃 | 当前任务不自动拉起；下一次新用户提交允许启动 |
+| Steam 点击“开始游戏” | 核对当前任务并恢复；无任务退出，不打开编辑器或创建任务 |
 
-启动确认只等待 10 秒，不重发启动请求。后台失联 4 秒后，状态程序自行退出。任务记录检查间隔 250 毫秒；程序退出目标为任务完成后 2 秒内，Steam 好友端传播延迟由 Steam 决定。等待用户回答或批准仍属于未结束任务。
+自动续跑、子任务及重复通知不作为新用户任务。CLI 在 VS Code 内置终端运行时仍按 CLI 处理。每次新任务重新解析已登记 CLI 启动入口，兼容 npm / NVM 链接和更新；手动填写的固定旧版本目录被删除时，需在管理界面重新识别或修正。
+
+启动确认上限 10 秒，不重复请求；检查间隔 250 毫秒；后台存活信号失联 4 秒后状态程序退出。正常任务结束后本地退出目标 2 秒内，好友端显示延迟由 Steam 决定。遇到未知来源或任务格式，仅停止计入该会话并显示原因，其他正常会话继续。
 
 ## 管理与隐私
 
-再次双击安装目录中的程序可检查状态、修复、启用／停用或卸载。新增 Steam 账号后，需要关闭 Steam 并在管理界面为该账号安装库条目。安装、升级和修复只合并本工具通知项；卸载只删除本工具拥有的条目与未被修改的发行图片。
+重启电脑后无需手动开启工具；已授权通知在下一次新任务时按需启动。管理界面用于检查、修复、启停、添加或移除配置目录及卸载。新 Steam 账号须单独配置库条目。安装只合并本工具配置，卸载只移除登记目录内本工具拥有的通知与授权、库条目及未被修改的发行图片。
 
-没有日志、遥测、后台下载或自动更新。不保存提示词、对话正文、截图或事件历史；仅在用户目录保存运行配置，以及任务标识、记录读取位置、进程存活信息和去重标识。为判断真实完成边界，会在内存中读取已登记会话的增量记录。
+无开机自启、日志、遥测、自动更新。不保存提示词、正文、截图或事件历史；仅保存配置编号、任务去重标识、读取位置、进程身份及当前异常原因。读取 Codex 自己维护的已登记会话增量记录时，正文只经过内存。公开图片为本项目原创，本机原有图片不会覆盖。
 
-## 开发
+## 开发与边界
 
-Windows x64、.NET Framework 4.8；无需 Python、Node.js 或额外运行时。
+Windows x64、.NET Framework 4.8、C# / Windows Forms；无需额外 Node.js、Python 或 .NET 安装包运行工具。
 
 ```powershell
 .\Build.ps1
@@ -46,6 +52,6 @@ Windows x64、.NET Framework 4.8；无需 Python、Node.js 或额外运行时。
 .\Package.ps1
 ```
 
-工程使用系统 C# 编译器、Windows Forms 和框架类库。`src` 包含源码，`tests` 包含隔离验证。GitHub Actions 构建与测试，版本标签 `v0.1.1` 生成发行附件。兼容边界及实测状态见 [COMPATIBILITY.md](COMPATIBILITY.md)。
+`src` 为源码，`tests` 为隔离样例及真实进程测试；自动测试无需模型账号。GitHub Actions 在干净检出中构建、测试并从标签发布。实测版本与未验证项目见 [COMPATIBILITY.md](COMPATIBILITY.md)，升级说明见 [CHANGELOG.md](CHANGELOG.md)。
 
-项目独立于 OpenAI、Valve 和 Microsoft；发行图片由本项目原创绘制，MIT 许可证不授予第三方商标权。
+支持 Windows 本机交互式客户端；不覆盖 `exec` / `review` 自动化、WSL、SSH / 远程、容器、macOS、Linux 或 ARM64。项目独立于 OpenAI、Valve、Microsoft；MIT 不授予第三方商标权。

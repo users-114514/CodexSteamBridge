@@ -168,7 +168,7 @@ public static class Tests
             Case("isolated install repeated repair and multiple accounts", () => {
                 string fixture = Path.Combine(root, "安装 fixture"), steam = Path.Combine(fixture, "steam.exe"), home = Path.Combine(fixture, "codex home"), target = Path.Combine(root, "安装 with spaces");
                 Directory.CreateDirectory(home); File.WriteAllText(steam, "fixture");
-                var settings = new Settings { SteamExe = steam, VSCodeExe = steam, CodexExe = steam, CodexHome = home };
+                var settings = new Settings { SchemaVersion = 2, SteamExe = steam, VSCodeExe = steam, CodexExe = steam, CodexHome = home };
                 Installer.Install(args[1], target, settings, new[] { "123", "4294967294" });
                 byte[] hooks = File.ReadAllBytes(Path.Combine(home, "hooks.json"));
                 var config = new StateStore(target).Settings(); Assert(config.Accounts.Count == 2 && config.Accounts[1].AccountId == "4294967294", "large ID changed");
@@ -226,7 +226,7 @@ public static class Tests
                 foreach (string name in new[] { "CodexSteamBridge.exe", "CodexSteamBridge.Hook.exe", "README.md", "README.en.md", "LICENSE", "COMPATIBILITY.md" })
                     File.WriteAllText(Path.Combine(fakeSource, name), "fixture");
                 File.WriteAllText(Path.Combine(target, "README.md"), "original");
-                var settings = new Settings { SteamExe = Path.Combine(fakeSource, "CodexSteamBridge.exe"), VSCodeExe = Path.Combine(fakeSource, "CodexSteamBridge.exe"), CodexExe = Path.Combine(fakeSource, "CodexSteamBridge.exe"), CodexHome = home };
+                var settings = new Settings { SchemaVersion = 2, SteamExe = Path.Combine(fakeSource, "CodexSteamBridge.exe"), VSCodeExe = Path.Combine(fakeSource, "CodexSteamBridge.exe"), CodexExe = Path.Combine(fakeSource, "CodexSteamBridge.exe"), CodexHome = home };
                 bool failed = false;
                 try { Installer.Install(fakeSource, target, settings, new[] { "123" }); } catch (DirectoryNotFoundException) { failed = true; }
                 Assert(failed && File.ReadAllText(Path.Combine(target, "README.md")) == "original" && !File.Exists(Path.Combine(target, "CodexSteamBridge.exe")), "partial installation not rolled back");

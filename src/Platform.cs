@@ -13,6 +13,7 @@ namespace CodexSteamBridge
     {
         public int Pid;
         public long Ticks;
+        public string Client = "";
         public static ProcessStamp Current()
         { using (var p = Process.GetCurrentProcess()) return new ProcessStamp { Pid = p.Id, Ticks = p.StartTime.ToUniversalTime().Ticks }; }
         public static bool Alive(int pid, long ticks)
@@ -41,8 +42,44 @@ namespace CodexSteamBridge
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
         [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+        [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int informationClass, IntPtr buffer, int size, out int needed);
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr CommandLineToArgvW(string command, out int count);
+        [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+        public static string[] Arguments(Process process)
+        {
+            IntPtr buffer = Marshal.AllocHGlobal(131072);
+            try
+            {
+                int needed;
+                if (NtQueryInformationProcess(process.Handle, 60, buffer, 131072, out needed) != 0) throw new IOException("Cannot identify Codex invocation");
+                string command = Marshal.PtrToStringUni(Marshal.ReadIntPtr(buffer, 8), (ushort)Marshal.ReadInt16(buffer) / 2);
+                int count; IntPtr values = CommandLineToArgvW(command, out count);
+                if (values == IntPtr.Zero) throw new IOException("Cannot parse Codex invocation");
+                try { return Enumerable.Range(1, Math.Max(0, count - 1)).Select(i => Marshal.PtrToStringUni(Marshal.ReadIntPtr(values, i * IntPtr.Size))).ToArray(); }
+                finally { LocalFree(values); }
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+        public static bool SupportedInvocation(string[] arguments)
+        {
+            var takesValue = new HashSet<string>(new[] { "-c", "--config", "--enable", "--disable", "-m", "--model", "-p", "--profile", "-C", "--cd", "-s", "--sandbox", "-a", "--ask-for-approval", "--add-dir", "-i", "--image", "--local-provider" });
+            foreach (string arg in arguments)
+                if (arg == "--remote" || arg.StartsWith("--remote=", StringComparison.Ordinal)) return false;
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                string arg = arguments[i];
+                if (arg == "--") return true;
+                if (takesValue.Contains(arg)) { i++; continue; }
+                if (arg.StartsWith("-", StringComparison.Ordinal)) continue;
+                // app-server is the actual owner for a local shared daemon or the extension.
+                return !new[] { "exec", "e", "review", "agents", "queue", "remote-control", "exec-server", "cloud", "sandbox", "debug" }.Contains(arg);
+            }
+            return true;
+        }
 
         public static ProcessStamp CodexOwner()
+        { return CodexOwner(null); }
+        public static ProcessStamp CodexOwner(CodexProfile profile)
         {
             var processes = new Dictionary<uint, ProcessEntry>();
             IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
@@ -56,17 +93,49 @@ namespace CodexSteamBridge
             finally { CloseHandle(snapshot); }
             uint current = (uint)Process.GetCurrentProcess().Id;
             int codex = 0;
+            string client = "";
+            string cli = profile != null && profile.CliEnabled ? CliDiscovery.Resolve(profile.CliEntry) : "";
             for (int i = 0; i < 20; i++)
             {
                 ProcessEntry item;
                 if (!processes.TryGetValue(current, out item)) break;
-                if (string.Equals(item.Name, "codex.exe", StringComparison.OrdinalIgnoreCase)) codex = (int)item.Pid;
-                if (codex != 0 && (string.Equals(item.Name, "Code.exe", StringComparison.OrdinalIgnoreCase) ||
-                                   string.Equals(item.Name, "Code - Insiders.exe", StringComparison.OrdinalIgnoreCase)))
+                if (string.Equals(item.Name, "codex.exe", StringComparison.OrdinalIgnoreCase))
                 {
-                    try { using (var p = Process.GetProcessById(codex)) return new ProcessStamp { Pid = p.Id, Ticks = p.StartTime.ToUniversalTime().Ticks }; }
-                    catch { return null; }
+                    try
+                    {
+                        using (var p = Process.GetProcessById((int)item.Pid))
+                        {
+                            string image = p.MainModule.FileName;
+                            if (profile == null) codex = p.Id;
+                            else if (profile.CliEnabled && CliDiscovery.SameImage(image, cli))
+                            {
+                                codex = p.Id; client = "cli";
+                                if (profile.ExtensionEnabled && CliDiscovery.SameImage(image, profile.ExtensionExe) && Arguments(p).FirstOrDefault() == "app-server")
+                                {
+                                    uint parent = item.Parent;
+                                    for (int n = 0; n < 12; n++)
+                                    {
+                                        ProcessEntry ancestor; if (!processes.TryGetValue(parent, out ancestor)) break;
+                                        if (ancestor.Name.Equals("Code.exe", StringComparison.OrdinalIgnoreCase) || ancestor.Name.Equals("Code - Insiders.exe", StringComparison.OrdinalIgnoreCase)) { client = "vscode"; break; }
+                                        parent = ancestor.Parent;
+                                    }
+                                }
+                            }
+                            else if (profile.ExtensionEnabled && CliDiscovery.SameImage(image, profile.ExtensionExe)) { codex = p.Id; client = "vscode"; }
+                            else return null;
+                            if (profile != null)
+                            {
+                                if (!SupportedInvocation(Arguments(p))) return null;
+                                return new ProcessStamp { Pid = p.Id, Ticks = p.StartTime.ToUniversalTime().Ticks, Client = client };
+                            }
+                        }
+                    }
+                    catch (System.ComponentModel.Win32Exception) { return null; }
+                    catch (InvalidOperationException) { return null; }
+                    catch (IOException) { return null; }
                 }
+                if (profile == null && codex != 0 && (item.Name.Equals("Code.exe", StringComparison.OrdinalIgnoreCase) || item.Name.Equals("Code - Insiders.exe", StringComparison.OrdinalIgnoreCase)))
+                    using (var p = Process.GetProcessById(codex)) return new ProcessStamp { Pid = p.Id, Ticks = p.StartTime.ToUniversalTime().Ticks, Client = "vscode" };
                 current = item.Parent;
             }
             return null;
@@ -115,7 +184,13 @@ namespace CodexSteamBridge
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex") : configured);
         }
         public static Settings Detect()
-        { return new Settings { SteamExe = SteamExe(), VSCodeExe = VSCodeExe(), CodexExe = CodexExe(), CodexHome = CodexHome() }; }
+        {
+            var settings = new Settings { SteamExe = SteamExe(), VSCodeExe = VSCodeExe(), CodexExe = CodexExe(), CodexHome = CodexHome() };
+            string cli = CliDiscovery.Detect();
+            settings.CodexProfiles.Add(new CodexProfile { Id = "default", CodexHome = settings.CodexHome, ExtensionExe = settings.CodexExe,
+                ExtensionEnabled = File.Exists(settings.CodexExe), CliEntry = cli, CliEnabled = cli.Length != 0 });
+            return settings;
+        }
         public static string DefaultRoot
         { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "CodexSteamBridge"); } }
         public static List<string> Accounts(string steamExe)

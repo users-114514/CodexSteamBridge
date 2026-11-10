@@ -14,25 +14,26 @@ namespace CodexSteamBridge
                                  Func<string, bool> validPath, Func<string, long> length)
         {
             string name = Json.Str(input, "hook_event_name"), id = Json.Str(input, "session_id"), turn = Json.Str(input, "turn_id");
-            if (id.Length == 0 || id.Length > 256 || turn.Length > 256) return false;
+            if (id.Length == 0 || id.Length > 322 || turn.Length > 256) return false;
             if (name == "Interrupt" && owner != null && turn.Length != 0 && !state.Seen.Contains(id + ":" + turn))
                 state.Seen.Add(id + ":" + turn); // A cancel may overtake its submit handler.
             var session = state.Sessions.FirstOrDefault(s => s.Id == id);
             if (session != null && owner != null && (name == "SessionStart" || name == "UserPromptSubmit") &&
-                (session.OwnerPid != owner.Pid || session.OwnerTicks != owner.Ticks) && !ProcessStamp.Alive(session.OwnerPid, session.OwnerTicks))
+                (session.OwnerPid != owner.Pid || session.OwnerTicks != owner.Ticks || session.Transcript != Json.Str(input, "transcript_path")))
             {
                 string replacement = Json.Str(input, "transcript_path");
                 if (!validPath(replacement)) return false;
-                foreach (var item in state.Tasks.Where(t => t.SessionId == id)) item.Active = false;
-                foreach (var item in state.Agents.Where(a => a.SessionId == id)) item.Active = false;
+                if (session.Transcript != replacement && state.Tasks.Any(t => t.SessionId == id && t.Active))
+                    session.Previous.Add(new SessionReader { Transcript = session.Transcript, Offset = session.Offset, OwnerPid = session.OwnerPid, OwnerTicks = session.OwnerTicks });
                 session.OwnerPid = owner.Pid; session.OwnerTicks = owner.Ticks;
-                session.Transcript = replacement; session.Offset = length(replacement);
+                if (session.Transcript != replacement) { session.Transcript = replacement; session.Offset = length(replacement); }
+                session.Client = owner.Client;
             }
             if (session == null)
             {
                 string transcript = Json.Str(input, "transcript_path");
                 if (owner == null || !validPath(transcript) || (name != "SessionStart" && name != "UserPromptSubmit")) return false;
-                session = new SessionInfo { Id = id, Transcript = transcript, OwnerPid = owner.Pid, OwnerTicks = owner.Ticks, Offset = length(transcript) };
+                session = new SessionInfo { Id = id, Transcript = transcript, OwnerPid = owner.Pid, OwnerTicks = owner.Ticks, Offset = length(transcript), Client = owner.Client };
                 state.Sessions.Add(session);
             }
             if (name == "UserPromptSubmit")
@@ -47,21 +48,27 @@ namespace CodexSteamBridge
                 var existing = state.Tasks.FirstOrDefault(t => t.SessionId == id && (t.TurnId == turn || t.Aliases.Contains(turn) || (root.Length != 0 && t.RootId == root)));
                 state.Seen.Add(key);
                 if (existing != null) return false;
-                state.Tasks.Add(new TaskInfo { SessionId = id, TurnId = turn, RootId = root.Length == 0 ? turn : root });
+                state.Tasks.Add(new TaskInfo { SessionId = id, TurnId = turn, RootId = root.Length == 0 ? turn : root,
+                    OwnerPid = owner.Pid, OwnerTicks = owner.Ticks, Client = owner.Client });
+                // A concurrently running reader may have passed this turn's start before its hook arrived.
+                session.Offset = Math.Min(session.Offset, length(session.Transcript));
                 return true;
             }
             var task = state.Tasks.FirstOrDefault(t => t.SessionId == id && (t.TurnId == turn || t.Aliases.Contains(turn)));
             if (name == "Interrupt")
             {
-                if (task != null)
+                if (task != null && owner != null && (task.OwnerPid == 0 || (task.OwnerPid == owner.Pid && task.OwnerTicks == owner.Ticks)))
                 { task.Active = false; foreach (var agent in state.Agents.Where(a => a.SessionId == id && a.RootId == task.RootId)) agent.Active = false; }
             }
-            else if (name == "SessionEnd")
-            { foreach (var item in state.Tasks.Where(t => t.SessionId == id)) item.Active = false; foreach (var agent in state.Agents.Where(a => a.SessionId == id)) agent.Active = false; }
-            else if (name == "SubagentStart" && task != null)
+            else if (name == "SessionEnd" && owner != null && owner.Client != "cli")
+            {
+                foreach (var item in state.Tasks.Where(t => t.SessionId == id && (owner == null || t.OwnerPid == 0 || (t.OwnerPid == owner.Pid && t.OwnerTicks == owner.Ticks))))
+                { item.Active = false; foreach (var agent in state.Agents.Where(a => a.SessionId == id && a.RootId == item.RootId)) agent.Active = false; }
+            }
+            else if (name == "SubagentStart" && task != null && task.Active)
             {
                 string agentId = Json.Str(input, "agent_id");
-                if (agentId.Length != 0 && agentId.Length <= 256 && !state.Agents.Any(a => a.Id == agentId))
+                if (agentId.Length != 0 && agentId.Length <= 256 && !state.Agents.Any(a => a.Id == agentId && a.SessionId == id))
                     state.Agents.Add(new AgentInfo { Id = agentId, SessionId = id, RootId = task.RootId });
             }
             else if (name == "SubagentStop")
@@ -81,6 +88,26 @@ namespace CodexSteamBridge
 
     public static class TranscriptAdapter
     {
+        public static string Source(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(stream, new UTF8Encoding(false, true)))
+            {
+                // Only the first metadata record is examined; its prompt/body is never persisted.
+                var line = new StringBuilder(); int next;
+                while (line.Length < 4 * 1024 * 1024 && (next = reader.Read()) >= 0 && next != '\n') line.Append((char)next);
+                var data = Json.Parse(line.ToString());
+                if (Json.Str(data, "type") != "session_meta") throw new InvalidDataException("unsupported_source");
+                var payload = Json.Obj(data, "payload");
+                return Json.Str(payload, "source");
+            }
+        }
+        public static bool UserTask(TaskInfo task)
+        {
+            if (task.RootId != task.TurnId) return false;
+            return task.Client == "cli" ? task.Trigger == "user" :
+                task.Trigger == "composer" || task.Trigger == "edit_user_message" || task.Trigger == "plan_implementation";
+        }
         public static long InitialOffset(string path)
         {
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
@@ -147,23 +174,52 @@ namespace CodexSteamBridge
         {
             foreach (var session in state.Sessions.ToArray())
             {
-                if (!ProcessStamp.Alive(session.OwnerPid, session.OwnerTicks))
+                try
                 {
-                    foreach (var task in state.Tasks.Where(t => t.SessionId == session.Id)) task.Active = false;
-                    foreach (var agent in state.Agents.Where(a => a.SessionId == session.Id)) agent.Active = false;
-                    state.Sessions.Remove(session); continue;
+                    foreach (var task in state.Tasks.Where(t => t.SessionId == session.Id && (t.Active || state.Agents.Any(a => a.Active && a.SessionId == t.SessionId && a.RootId == t.RootId))))
+                        if (!ProcessStamp.Alive(task.OwnerPid == 0 ? session.OwnerPid : task.OwnerPid, task.OwnerPid == 0 ? session.OwnerTicks : task.OwnerTicks))
+                        { task.Active = false; foreach (var agent in state.Agents.Where(a => a.SessionId == session.Id && a.RootId == task.RootId)) agent.Active = false; }
+                    if (!state.Tasks.Any(t => t.SessionId == session.Id && t.Active) && !state.Agents.Any(a => a.SessionId == session.Id && a.Active)) continue;
+                    foreach (var previous in session.Previous)
+                        previous.Offset = Read(previous.Transcript, previous.Offset, payload => Apply(state, session.Id, payload));
+                    session.Offset = Read(session.Transcript, session.Offset, payload => Apply(state, session.Id, payload));
+                    foreach (var task in state.Tasks.Where(t => t.SessionId == session.Id && t.Active && t.AwaitStartUntil != 0))
+                    {
+                        if (task.Trigger.Length != 0)
+                        { task.AwaitStartUntil = 0; if (!UserTask(task)) task.Active = false; }
+                        else if (DateTime.UtcNow.Ticks >= task.AwaitStartUntil)
+                        { task.Active = false; Profiles.Issue(state, session.ProfileId, "missing_task_start"); }
+                    }
+                    session.Previous.RemoveAll(r => !state.Tasks.Any(t => t.SessionId == session.Id && t.Active && t.OwnerPid == r.OwnerPid && t.OwnerTicks == r.OwnerTicks));
                 }
-                if (!state.Tasks.Any(t => t.SessionId == session.Id && t.Active) && !state.Agents.Any(a => a.SessionId == session.Id && a.Active)) continue;
-                session.Offset = Read(session.Transcript, session.Offset, payload => Apply(state, session.Id, payload));
+                catch (InvalidDataException) { Reject(state, session, "unsupported_transcript"); }
+                catch (IOException) { Reject(state, session, "transcript_unavailable"); }
+                catch (ArgumentException) { Reject(state, session, "unsupported_transcript"); }
+                catch (UnauthorizedAccessException) { Reject(state, session, "transcript_unavailable"); }
             }
             foreach (var agent in state.Agents.Where(a => a.Active && a.Transcript.Length != 0).ToArray())
-                agent.Offset = Read(agent.Transcript, agent.Offset, payload =>
+            {
+                try { agent.Offset = Read(agent.Transcript, agent.Offset, payload =>
                 {
                     string type = Json.Str(payload, "type");
                     if (type == "task_complete" || type == "turn_aborted") agent.Active = false;
                     else if (type.StartsWith("task_", StringComparison.Ordinal) && type != "task_started") throw new InvalidDataException("unsupported_transcript");
-                });
-            state.Sessions.RemoveAll(s => !ProcessStamp.Alive(s.OwnerPid, s.OwnerTicks));
+                }); }
+                catch (Exception error)
+                {
+                    if (!(error is IOException) && !(error is ArgumentException) && !(error is UnauthorizedAccessException)) throw;
+                    agent.Active = false;
+                    var session = state.Sessions.FirstOrDefault(s => s.Id == agent.SessionId);
+                    if (session != null) Profiles.Issue(state, session.ProfileId, "unsupported_transcript");
+                }
+            }
+            state.Sessions.RemoveAll(s => !state.Tasks.Any(t => t.SessionId == s.Id && t.Active) && !state.Agents.Any(a => a.SessionId == s.Id && a.Active));
+        }
+        public static void Reject(BridgeState state, SessionInfo session, string reason)
+        {
+            foreach (var task in state.Tasks.Where(t => t.SessionId == session.Id)) task.Active = false;
+            foreach (var agent in state.Agents.Where(a => a.SessionId == session.Id)) agent.Active = false;
+            Profiles.Issue(state, session.ProfileId, reason);
         }
         public static void Apply(BridgeState state, string sessionId, Dictionary<string, object> payload)
         {
@@ -209,29 +265,61 @@ namespace CodexSteamBridge
             }
         }
 
-        public void Receive(Dictionary<string, object> input)
+        public void Receive(Dictionary<string, object> input) { Receive(input, ""); }
+        public void Receive(Dictionary<string, object> input, string profileId)
         {
             var settings = store.Settings();
             if (!settings.Enabled) return;
-            var owner = Native.CodexOwner();
+            var profile = settings.CodexProfiles.FirstOrDefault(p => p.Id == (profileId.Length == 0 ? settings.DefaultProfileId : profileId));
+            if (profile == null || !profile.Enabled) return;
+            var owner = Native.CodexOwner(profile);
+            if (owner == null) return;
+            input = new Dictionary<string, object>(input);
+            string rawSession = Json.Str(input, "session_id");
+            if (rawSession.Length == 0 || rawSession.Length > 256) return;
+            input["session_id"] = Profiles.SessionKey(profile.Id, rawSession);
+            string transcript = Json.Str(input, "transcript_path");
             var mutex = store.Lock();
             try
             {
                 var state = store.Load();
-                bool fresh = Notifications.Apply(state, input, owner, p => TranscriptAdapter.ValidPath(p, settings.CodexHome), p => TranscriptAdapter.InitialOffset(p));
+                if (Json.Str(input, "hook_event_name") == "UserPromptSubmit" || Json.Str(input, "hook_event_name") == "SessionStart")
+                {
+                    try
+                    {
+                        if (!TranscriptAdapter.ValidPath(transcript, profile.CodexHome)) throw new InvalidDataException("invalid_transcript_path");
+                        string source = TranscriptAdapter.Source(transcript);
+                        if (source != "cli" && source != "vscode") throw new InvalidDataException("unsupported_source");
+                        Profiles.Issue(state, profile.Id, "");
+                    }
+                    catch (Exception error)
+                    {
+                        if (!(error is IOException) && !(error is ArgumentException) && !(error is UnauthorizedAccessException)) throw;
+                        var rejected = state.Sessions.FirstOrDefault(s => s.Id == Json.Str(input, "session_id"));
+                        if (rejected != null) TranscriptAdapter.Reject(state, rejected, "unsupported_source");
+                        else Profiles.Issue(state, profile.Id, "unsupported_source");
+                        store.Save(state); return;
+                    }
+                }
+                bool fresh = Notifications.Apply(state, input, owner, p => TranscriptAdapter.ValidPath(p, profile.CodexHome), p => TranscriptAdapter.InitialOffset(p));
+                var sessionInfo = state.Sessions.FirstOrDefault(s => s.Id == Json.Str(input, "session_id"));
+                if (sessionInfo != null) sessionInfo.ProfileId = profile.Id;
                 if (fresh)
                 {
+                    var incoming = state.Tasks.FirstOrDefault(t => t.SessionId == Json.Str(input, "session_id") && t.TurnId == Json.Str(input, "turn_id"));
+                    if (incoming != null) incoming.AwaitStartUntil = DateTime.UtcNow.AddSeconds(2).Ticks;
                     try { TranscriptAdapter.Reconcile(state); }
                     catch (InvalidDataException) { Lifecycle.Stop(state, "unsupported_transcript"); store.Save(state); return; }
                     var submitted = state.Tasks.FirstOrDefault(t => t.SessionId == Json.Str(input, "session_id") && t.TurnId == Json.Str(input, "turn_id"));
-                    if (submitted != null && (submitted.RootId != submitted.TurnId ||
-                        (submitted.Trigger.Length != 0 && submitted.Trigger != "composer" && submitted.Trigger != "plan_implementation")))
+                    if (submitted == null || !submitted.Active || (submitted.Trigger.Length != 0 && !TranscriptAdapter.UserTask(submitted)))
                     { store.Save(state); return; } // A model/hook continuation is not a new user request.
                     if (WorkerAlive(state) && state.Phase != "stopped") { /* Existing worker aggregates the new root. */ }
                     else
                     {
                         var steam = SteamPlatform.Inspect(settings);
                         Lifecycle.Begin(state, steam, DateTime.UtcNow.Ticks, false);
+                        state.ActivationSessionId = submitted.AwaitStartUntil != 0 ? submitted.SessionId : "";
+                        state.ActivationTurnId = submitted.AwaitStartUntil != 0 ? submitted.TurnId : "";
                         if (state.Phase != "stopped") StartWorker(state);
                     }
                 }
@@ -268,7 +356,19 @@ namespace CodexSteamBridge
                             catch (InvalidDataException) { Lifecycle.Stop(current, "unsupported_transcript"); }
                             catch (FileNotFoundException) { Lifecycle.Stop(current, "transcript_unavailable"); }
                             catch (DirectoryNotFoundException) { Lifecycle.Stop(current, "transcript_unavailable"); }
-                            action = Lifecycle.Tick(current, settings, SteamPlatform.Inspect(settings), DateTime.UtcNow.Ticks, PresenceAlive(current));
+                            if (current.ActivationTurnId.Length != 0)
+                            {
+                                var activation = current.Tasks.FirstOrDefault(t => t.SessionId == current.ActivationSessionId && t.TurnId == current.ActivationTurnId && t.Active);
+                                if (activation == null || (activation.AwaitStartUntil == 0 && !TranscriptAdapter.UserTask(activation)))
+                                    Lifecycle.Stop(current, "not_user_submission");
+                                if (activation == null || activation.AwaitStartUntil == 0) { current.ActivationTurnId = ""; current.ActivationSessionId = ""; }
+                            }
+                            var steam = SteamPlatform.Inspect(settings);
+                            bool pending = current.ActivationTurnId.Length != 0 || (current.Tasks.Any(t => t.Active) && current.Tasks.Where(t => t.Active).All(t => t.AwaitStartUntil != 0));
+                            if (pending && !current.LaunchRequested && current.Phase != "stopped" && settings.Enabled && Lifecycle.Gate(steam).Length == 0 &&
+                                current.SteamPid == steam.Pid && current.SteamTicks == steam.StartTicks)
+                            { current.HeartbeatTicks = DateTime.UtcNow.Ticks; action = NextAction.Wait; }
+                            else action = Lifecycle.Tick(current, settings, steam, DateTime.UtcNow.Ticks, PresenceAlive(current));
                             if (action == NextAction.Exit) current.WorkerPid = 0;
                             store.Save(current);
                         }
@@ -323,7 +423,7 @@ namespace CodexSteamBridge
                         string game = Environment.GetEnvironmentVariable("SteamGameId");
                         if (account == null || game != account.GameId) return; // Must be launched by the configured Steam shortcut.
                         bool automatic = WorkerAlive(state) && state.Phase == "launching" && DateTime.UtcNow.Ticks < state.DeadlineTicks;
-                        if (!automatic) Lifecycle.Begin(state, steam, DateTime.UtcNow.Ticks, true);
+                        if (!automatic) { Lifecycle.Begin(state, steam, DateTime.UtcNow.Ticks, true); state.ActivationSessionId = ""; state.ActivationTurnId = ""; }
                         state.PresencePid = self.Pid; state.PresenceTicks = self.Ticks; state.Desired = true;
                         if (!WorkerAlive(state)) StartWorker(state);
                         store.Save(state);

@@ -15,3 +15,7 @@ if($LASTEXITCODE -ne 0){throw 'Tests failed.'}
 if($LASTEXITCODE -ne 0){throw 'Process test compilation failed.'}
 & (Join-Path $bridgeTests 'ProcessTests.exe') $bridgeApp (Join-Path $bridgeFixture 'processes')
 if($LASTEXITCODE -ne 0){throw 'Process tests failed.'}
+& $bridgeCompiler /nologo /target:exe /platform:x64 /warn:4 /warnaserror+ /utf8output ('/r:'+(Join-Path $bridgeApp 'CodexSteamBridge.exe')) /r:System.dll /r:System.Core.dll /r:System.Web.Extensions.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll ('/out:'+(Join-Path $bridgeTests 'CliTests.exe')) (Join-Path $PSScriptRoot 'tests\CliTests.cs')
+if($LASTEXITCODE -ne 0){throw 'CLI/profile test compilation failed.'}
+& (Join-Path $bridgeTests 'CliTests.exe') $bridgeApp (Join-Path $bridgeFixture 'cli')
+if($LASTEXITCODE -ne 0){throw 'CLI/profile tests failed.'}

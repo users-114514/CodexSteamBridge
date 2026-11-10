@@ -14,13 +14,16 @@ namespace CodexSteamBridge
     public sealed class OwnedAsset { public string Path = ""; public string Hash = ""; }
     public sealed class Installation
     {
-        public string Version = "0.1.1";
+        public string Version = "0.2.0";
         public string Root = "";
         public string CodexHome = "";
         public List<string> HookKeys = new List<string>();
         public List<string> Files = new List<string>();
         public List<OwnedAsset> Assets = new List<OwnedAsset>();
+        public List<InstalledProfile> Profiles = new List<InstalledProfile>();
     }
+    public sealed class InstalledProfile
+    { public string Id = ""; public string CodexHome = ""; public List<string> HookKeys = new List<string>(); }
     public sealed class FileTransaction : IDisposable
     {
         readonly Dictionary<string, byte[]> before = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
@@ -46,13 +49,26 @@ namespace CodexSteamBridge
     {
         public static readonly string[] Events = { "SessionStart", "UserPromptSubmit", "Stop", "Interrupt", "SessionEnd", "SubagentStart", "SubagentStop" };
         public static string Command(string root)
-        { return "powershell.exe -NoProfile -NonInteractive -Command \"& '" + Path.Combine(root, "CodexSteamBridge.Hook.exe").Replace("'", "''") + "' event\""; }
+        { return Command(root, ""); }
+        public static string Command(string root, string profile)
+        {
+            if (profile.Any(c => !Characters.LetterOrDigit(c) && c != '-' && c != '_')) throw new InvalidDataException("Invalid hook profile");
+            return "powershell.exe -NoProfile -NonInteractive -Command \"& '" + Path.Combine(root, "CodexSteamBridge.Hook.exe").Replace("'", "''") + "' event" + (profile.Length == 0 ? "" : " --profile " + profile) + "\"";
+        }
         static List<object> List(object value)
         { return value is object[] ? ((object[])value).ToList() : value is ArrayList ? ((ArrayList)value).Cast<object>().ToList() : value as List<object>; }
         public static bool Owns(string command, string root)
-        { return command == Command(root); }
+        {
+            if (command == Command(root)) return true;
+            string prefix = Command(root).TrimEnd('"') + " --profile ";
+            if (!command.StartsWith(prefix, StringComparison.Ordinal) || !command.EndsWith("\"", StringComparison.Ordinal)) return false;
+            string id = command.Substring(prefix.Length, command.Length - prefix.Length - 1);
+            return id.Length > 0 && id.All(c => Characters.LetterOrDigit(c) || c == '-' || c == '_');
+        }
 
         public static byte[] Merge(byte[] original, string root, bool remove)
+        { return Merge(original, root, remove, ""); }
+        public static byte[] Merge(byte[] original, string root, bool remove, string profile)
         {
             var document = original == null ? new Dictionary<string, object>() : Json.Parse(Encoding.UTF8.GetString(original).TrimStart('\ufeff'));
             if (document == null) throw new InvalidDataException("Invalid hooks.json");
@@ -81,7 +97,7 @@ namespace CodexSteamBridge
                         if (handler == null) throw new InvalidDataException("Invalid hook handler");
                         if (Owns(Json.Str(handler, "command"), root))
                         {
-                            if (remove || found) continue;
+                            if (remove || found || Json.Str(handler, "command") != Command(root, profile)) continue;
                             found = true;
                         }
                         kept.Add(handler);
@@ -90,10 +106,29 @@ namespace CodexSteamBridge
                 }
                 if (!remove && !found)
                     output.Add(new Dictionary<string, object> { { "hooks", new object[] { new Dictionary<string, object> {
-                        { "type", "command" }, { "command", Command(root) }, { "timeout", 3 } } } } });
+                        { "type", "command" }, { "command", Command(root, profile) }, { "timeout", 3 } } } } });
                 if (output.Count == 0) hooks.Remove(name); else hooks[name] = output;
             }
             return Encoding.UTF8.GetBytes(Json.Serializer().Serialize(document));
+        }
+        public static List<string> Keys(byte[] bytes, string path, string root)
+        {
+            var result = new List<string>(); if (bytes == null) return result;
+            var hooks = Json.Obj(Json.Parse(Encoding.UTF8.GetString(bytes).TrimStart('\ufeff')), "hooks"); if (hooks == null) return result;
+            foreach (string name in Events)
+            {
+                object raw; if (!hooks.TryGetValue(name, out raw)) continue;
+                var groups = List(raw); if (groups == null) throw new InvalidDataException("Invalid hook groups");
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    var group = groups[i] as Dictionary<string, object>; if (group == null || !group.TryGetValue("hooks", out raw)) continue;
+                    var handlers = List(raw); if (handlers == null) continue;
+                    for (int j = 0; j < handlers.Count; j++)
+                        if (Owns(Json.Str(handlers[j] as Dictionary<string, object>, "command"), root))
+                            result.Add(path + ":" + Regex.Replace(name, "([a-z])([A-Z])", "$1_$2").ToLowerInvariant() + ":" + i + ":" + j);
+                }
+            }
+            return result;
         }
         public static byte[] RemoveTrust(byte[] original, IEnumerable<string> keys)
         {
@@ -142,19 +177,21 @@ namespace CodexSteamBridge
             throw new IOException("Codex interface timed out");
         }
         public static List<Dictionary<string, object>> Inspect(Settings settings, string root)
+        { return Inspect(settings.CodexExe, settings.CodexHome, root); }
+        public static List<Dictionary<string, object>> Inspect(string exe, string home, string root)
         {
-            if (!File.Exists(settings.CodexExe)) throw new FileNotFoundException("Codex executable not found");
-            var info = new ProcessStartInfo(settings.CodexExe, "app-server --stdio") {
+            if (!File.Exists(exe)) throw new FileNotFoundException("Codex executable not found");
+            var info = new ProcessStartInfo(exe, "app-server --stdio") {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
                 RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = root,
                 StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
-            info.EnvironmentVariables["CODEX_HOME"] = settings.CodexHome;
+            info.EnvironmentVariables["CODEX_HOME"] = home;
             using (var process = Process.Start(info))
             {
                 process.ErrorDataReceived += (s, e) => { }; process.BeginErrorReadLine();
                 try
                 {
-                    process.StandardInput.WriteLine(Json.Serializer().Serialize(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "codex_steam_bridge", version = "0.1.1" }, capabilities = new { } } }));
+                    process.StandardInput.WriteLine(Json.Serializer().Serialize(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "codex_steam_bridge", version = "0.2.0" }, capabilities = new { } } }));
                     process.StandardInput.Flush(); Response(process, 1, 8000);
                     process.StandardInput.WriteLine("{\"method\":\"initialized\"}");
                     process.StandardInput.WriteLine(Json.Serializer().Serialize(new { id = 2, method = "hooks/list", @params = new { cwds = new[] { root } } }));
@@ -223,28 +260,22 @@ namespace CodexSteamBridge
             return commands.Count == 1 && string.Equals(commands[0].InnerText, Path.Combine(root, "CodexSteamBridge.exe"), StringComparison.OrdinalIgnoreCase);
         }
         static BridgeState MigrateState(string root)
+        { return new BridgeState { Phase = "stopped", Reason = "waiting_new_task" }; }
+
+        static List<InstalledProfile> Registered(Installation manifest)
         {
-            string path = Path.Combine(root, "runtime", "state.json");
-            if (!File.Exists(path)) return new BridgeState { Reason = "waiting_new_task" };
-            var data = Json.Parse(File.ReadAllText(path, Encoding.UTF8));
-            BridgeState state;
-            if (Json.Str(data, "SchemaVersion") == "2") state = Json.Read<BridgeState>(path);
-            else
-            {
-                state = new BridgeState(); object sessions;
-                if (data.TryGetValue("Sessions", out sessions))
-                    foreach (Dictionary<string, object> item in (IEnumerable)sessions)
-                    {
-                        var session = new SessionInfo { Id = Json.Str(item, "Id"), Transcript = Json.Str(item, "Transcript"),
-                            OwnerPid = Convert.ToInt32(item["OwnerPid"]), OwnerTicks = Convert.ToInt64(item["OwnerTicks"]), Offset = Convert.ToInt64(item["Offset"]) };
-                        state.Sessions.Add(session);
-                        object active;
-                        if (item.TryGetValue("Active", out active)) foreach (object id in (IEnumerable)active)
-                        { string turn = Convert.ToString(id); state.Tasks.Add(new TaskInfo { SessionId = session.Id, TurnId = turn, RootId = turn }); state.Seen.Add(session.Id + ":" + turn); }
-                    }
-            }
-            Lifecycle.Stop(state, "waiting_new_task"); state.WorkerPid = 0; state.PresencePid = 0; state.HeartbeatTicks = 0;
-            return state;
+            if (manifest.Profiles.Count != 0) return manifest.Profiles;
+            return string.IsNullOrEmpty(manifest.CodexHome) ? new List<InstalledProfile>() :
+                new List<InstalledProfile> { new InstalledProfile { Id = "default", CodexHome = manifest.CodexHome, HookKeys = manifest.HookKeys } };
+        }
+        static void RemoveProfile(FileTransaction transaction, InstalledProfile profile, string root)
+        {
+            string hooks = Path.Combine(profile.CodexHome, "hooks.json"), config = Path.Combine(profile.CodexHome, "config.toml");
+            if (!File.Exists(hooks)) return;
+            byte[] before = File.ReadAllBytes(hooks);
+            var keys = Hooks.Keys(before, hooks, root);
+            transaction.Write(hooks, Hooks.Merge(before, root, true));
+            if (File.Exists(config) && keys.Count != 0) transaction.Write(config, Hooks.RemoveTrust(File.ReadAllBytes(config), keys));
         }
 
         public static void Install(string source, string root, Settings settings, IEnumerable<string> selectedAccounts)
@@ -257,14 +288,14 @@ namespace CodexSteamBridge
         static void InstallCore(string source, string root, Settings settings, IEnumerable<string> selectedAccounts)
         {
             root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar); ValidateRoot(root);
-            if (!File.Exists(settings.SteamExe) || !File.Exists(settings.VSCodeExe) || !File.Exists(settings.CodexExe)) throw new IOException("Install Steam, VS Code and the native Codex extension first");
-            if (!Directory.Exists(settings.CodexHome)) throw new IOException("Open Codex once, or select its existing configuration directory");
+            if (!File.Exists(settings.SteamExe)) throw new IOException("Install Steam first");
+            Profiles.Validate(settings);
             var accounts = selectedAccounts.Distinct().ToArray();
             if (accounts.Length == 0) throw new IOException("Select at least one Steam account");
             var changes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
             var manifestPath = Path.Combine(root, "installation.json");
             Installation manifest = File.Exists(manifestPath) ? Json.Read<Installation>(manifestPath) : new Installation();
-            manifest.Root = root; manifest.CodexHome = settings.CodexHome; manifest.Version = "0.1.1";
+            manifest.Root = root; manifest.CodexHome = settings.CodexHome; manifest.Version = "0.2.0";
             string icon = Path.Combine(root, "artwork", "logo.ico");
             var configured = new List<AccountConfig>(settings.Accounts);
             foreach (string account in accounts)
@@ -278,7 +309,7 @@ namespace CodexSteamBridge
                 if (!Same(before, after)) changes[path] = after;
             }
             if (changes.Count != 0 && SteamPlatform.Inspect(settings).Running) throw new IOException("steam_must_close");
-            settings.Accounts = configured; settings.SchemaVersion = 2;
+            settings.Accounts = configured; settings.SchemaVersion = 3;
             var files = new List<string> { "CodexSteamBridge.exe", "CodexSteamBridge.Hook.exe", "README.md", "README.en.md", "LICENSE", "COMPATIBILITY.md" };
             foreach (string file in files) if (!File.Exists(Path.Combine(source, file))) throw new FileNotFoundException("Incomplete release package", file);
             bool legacyTask = OwnLegacyTask(root);
@@ -310,8 +341,21 @@ namespace CodexSteamBridge
                             transaction.Write(target, bytes); manifest.Assets.Add(new OwnedAsset { Path = target, Hash = Hash(bytes) });
                         }
                     }
-                    string hooks = Path.Combine(settings.CodexHome, "hooks.json");
-                    transaction.Write(hooks, Hooks.Merge(File.Exists(hooks) ? File.ReadAllBytes(hooks) : null, root, false));
+                    var installed = new List<InstalledProfile>();
+                    foreach (var old in Registered(manifest))
+                        if (!settings.CodexProfiles.Any(p => Profiles.Home(p.CodexHome).Equals(Profiles.Home(old.CodexHome), StringComparison.OrdinalIgnoreCase)))
+                            RemoveProfile(transaction, old, root);
+                    foreach (var profile in settings.CodexProfiles)
+                    {
+                        string hooks = Path.Combine(profile.CodexHome, "hooks.json");
+                        byte[] before = File.Exists(hooks) ? File.ReadAllBytes(hooks) : null;
+                        string id = profile.LegacyHooks ? "" : profile.Id;
+                        byte[] after = Hooks.Merge(before, root, false, id);
+                        transaction.Write(hooks, after);
+                        installed.Add(new InstalledProfile { Id = profile.Id, CodexHome = profile.CodexHome, HookKeys = Hooks.Keys(after, hooks, root) });
+                    }
+                    manifest.Profiles = installed;
+                    manifest.HookKeys = installed.SelectMany(p => p.HookKeys).ToList();
                     transaction.WriteJson(Path.Combine(root, "settings.json"), settings);
                     transaction.WriteJson(Path.Combine(root, "runtime", "state.json"), MigrateState(root));
                     transaction.WriteJson(manifestPath, manifest);
@@ -351,10 +395,7 @@ namespace CodexSteamBridge
                     string path = ShortcutPath(settings, account.AccountId); if (!File.Exists(path)) continue;
                     var tree = Vdf.Read(File.ReadAllBytes(path)); Vdf.RemoveShortcut(tree, root, new[] { account }); transaction.Write(path, Vdf.Write(tree));
                 }
-                string hooks = Path.Combine(settings.CodexHome, "hooks.json");
-                if (File.Exists(hooks)) transaction.Write(hooks, Hooks.Merge(File.ReadAllBytes(hooks), root, true));
-                string config = Path.Combine(settings.CodexHome, "config.toml");
-                if (manifest.HookKeys.Count != 0 && File.Exists(config)) transaction.Write(config, Hooks.RemoveTrust(File.ReadAllBytes(config), manifest.HookKeys));
+                foreach (var profile in Registered(manifest)) RemoveProfile(transaction, profile, root);
                 string userData = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(settings.SteamExe), "userdata")) + Path.DirectorySeparatorChar;
                 foreach (var asset in manifest.Assets)
                     if (Path.GetFullPath(asset.Path).StartsWith(userData, StringComparison.OrdinalIgnoreCase) && File.Exists(asset.Path) && Hash(File.ReadAllBytes(asset.Path)) == asset.Hash) transaction.Write(asset.Path, null);

@@ -1,21 +1,27 @@
 # Compatibility / 兼容性
 
-| 项目 | 支持范围 / Support |
+| 项目 / Item | 实测状态 / Verification |
 | --- | --- |
-| OS | Windows 10 22H2 x64 / Windows 11 x64；普通当前用户安装 |
-| Framework | .NET Framework 4.8 |
-| Editor | 本机 VS Code / VS Code Insiders，原生 Windows Codex 扩展 |
-| Codex adapter | hook payloads with session_id / turn_id; transcript event_msg task_started / task_complete / turn_aborted |
-| Steam | 已安装并运行的 Windows 客户端，按账号配置非 Steam 快捷方式 |
-| Excluded | WSL, SSH/remote, containers, Codex CLI, macOS, Linux, ARM64 |
+| Windows 10 22H2 x64 build 19045 | 本机真实 CLI、Steam，隔离安装及进程测试 / local CLI + Steam and isolated tests |
+| Windows 11 x64 desktop | 目标支持，未在 Windows 11 桌面实测 / target support, desktop not tested |
+| GitHub runner | Windows Server 2022 build / isolated tests; does not certify Windows 11 desktop |
+| .NET Framework | 4.8, x64, current-user installation |
+| Interactive CLI 0.163.0 | 官方 npm 原生包，新建、resume、fork 的真实任务与 Steam 启停；默认及 `--no-daemon` 启动 / official native binary, new/resume/fork smoke tests |
+| Interactive CLI 0.167.0 | 本机独立安装，默认启动首条任务与 Steam 启停实测 / installed standalone binary, default startup smoke test |
+| VS Code extension 26.1021.22027 | 内置 0.164.0-alpha.11.1；原有真实联动已确认，0.2.0 迁移保留 7 项原生授权 / existing confirmed integration, native review preserved |
+| Other CLI / extension versions | 未逐版本实测；格式不兼容时隔离退出 / not certified per version |
+| Multiple homes / CLI-only install / npm-NVM layout | 隔离配置、进程及事务测试 / isolated configuration, process and rollback tests |
+| Shared daemon / no-daemon / closed terminal | 隔离真实进程链覆盖；各真实版本的完整交互矩阵未全部执行 / fixture process chains; full native matrix pending |
+| Standard user / Windows 11 / actual NVM switching | 桌面端到端未全部实测；程序使用 asInvoker / full desktop coverage pending |
 
-本机参考版本：Windows 10 22H2 build 19045；Codex VS Code 扩展 26.1021.22027；其内置 Codex CLI 0.164.0-alpha.11.1。Windows 11 必须由额外机器或 GitHub Windows runner 完成验证，不能从本机结果推定。
+支持本机交互式 `codex`、`codex resume`、`codex fork`，独立或 VS Code 内置终端。恢复与分叉的用户任务按相同用户提交标记处理。取消、失败、审批等待、多客户端和目录并发、重复及乱序通知、关闭窗口、崩溃和事务回滚有隔离测试；真实模型会话的所有组合、真实 Steam 退出竞态及好友端传播时间仍需额外人工验收。实验版不宣称这些项目全部通过。
 
-Codex 通知定义使用原生信任审核；管理策略禁用通知时，本工具不会绕过。升级 Codex 后应重新检查联动，任务记录属于不稳定接口；未知 task_* 事件会停止联动并显示不兼容状态。
+Supported task markers: CLI `user`; extension `composer`, `edit_user_message`, `plan_implementation`. `event_msg` records `task_started` / `task_complete` / `turn_aborted` provide task boundaries. Metadata must identify a registered local `cli` or `vscode` source. Transcript details are unstable interfaces: unknown task records retire the affected session and appear in the manager.
+
+Excluded: automated `exec` / `review`, WSL, SSH / remote, containers, macOS, Linux, ARM64. Managed policy disabling hooks is respected. Steam privacy/invisible settings and another game affect friends' display; the bridge never changes these settings.
 
 Official references:
 
 - https://learn.chatgpt.com/docs/hooks.md
+- https://developers.openai.com/codex/cli/reference/
 - https://developers.openai.com/codex/app-server/
-
-Steam 非 Steam 游戏状态与好友隐私、隐身设置及同时运行的其他游戏有关。本工具不会更改账号在线/隐私设置。
