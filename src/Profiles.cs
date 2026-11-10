@@ -103,6 +103,13 @@ namespace CodexSteamBridge
                     string path; try { path = Path.Combine(directory.Trim('"'), name); } catch (ArgumentException) { continue; }
                     if (Resolve(path).Length != 0) return path;
                 }
+            // Prefer an already running standalone client to an inactive old NVM version.
+            foreach (var process in Process.GetProcessesByName("codex"))
+                using (process)
+                {
+                    try { string path = process.MainModule.FileName; if (path.IndexOf(".vscode", StringComparison.OrdinalIgnoreCase) < 0 && Resolve(path).Length != 0) return path; }
+                    catch (System.ComponentModel.Win32Exception) { } catch (InvalidOperationException) { }
+                }
             foreach (string root in new[] { Environment.GetEnvironmentVariable("NVM_HOME") ?? "",
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nvm"),
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm") })
@@ -111,13 +118,6 @@ namespace CodexSteamBridge
                 foreach (string folder in new[] { root }.Concat(Directory.GetDirectories(root, "v*", SearchOption.TopDirectoryOnly).OrderByDescending(x => x)))
                 { string entry = Path.Combine(folder, "codex.cmd"); if (Resolve(entry).Length != 0) return entry; }
             }
-            // Standalone installations do not necessarily put themselves on this process's PATH.
-            foreach (var process in Process.GetProcessesByName("codex"))
-                using (process)
-                {
-                    try { string path = process.MainModule.FileName; if (path.IndexOf(".vscode", StringComparison.OrdinalIgnoreCase) < 0 && Resolve(path).Length != 0) return path; }
-                    catch (System.ComponentModel.Win32Exception) { } catch (InvalidOperationException) { }
-                }
             return "";
         }
         public static bool SameImage(string a, string b)

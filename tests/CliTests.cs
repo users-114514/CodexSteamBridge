@@ -199,7 +199,8 @@ public static class CliTests
             Case("manager constructs without startup error", () => { using (var manager = new Manager()) Assert(manager.Controls.Count > 0, "manager controls absent"); });
             Case("upgrade preserves legacy command and trust bytes; replay does not revive stopped work", () => {
                 string target = Path.Combine(root, "legacy install"), home = Path.Combine(root, "legacy home"), exe = Path.Combine(app, "CodexSteamBridge.exe");
-                var settings = new Settings { SchemaVersion = 2, CodexHome = home, CodexExe = exe, SteamExe = exe }; Directory.CreateDirectory(home);
+                string steam = Path.Combine(root, "legacy-steam.exe"); File.WriteAllText(steam, "fixture");
+                var settings = new Settings { SchemaVersion = 2, CodexHome = home, CodexExe = exe, SteamExe = steam }; Directory.CreateDirectory(home);
                 Installer.Install(app, target, settings, new[] { "123" }); byte[] hooks = File.ReadAllBytes(Path.Combine(home, "hooks.json"));
                 string config = Path.Combine(home, "config.toml"); File.WriteAllText(config, "[hooks.state.'untouched']\ntrusted_hash='keep'\n"); byte[] trust = File.ReadAllBytes(config);
                 settings = new StateStore(target).Settings(); settings.CodexProfiles[0].CliEnabled = true; settings.CodexProfiles[0].CliEntry = exe;

@@ -8,6 +8,7 @@
 - CLI 0.163.0 also resumed the 0.167.0 smoke conversation with a new user task, then forked it with another task. Both created a new presence activation and returned to idle on completion.
 - Pending manual matrix: full real shared-daemon/native terminal-close interactions per version, resume/fork selection and approval flows, Windows 11 desktop, actual NVM switches, standard-user desktop installation, Steam exit races and friend-side latency. Isolated tests are not claims that these manual cases passed.
 - Release requires clean-source rebuild, green main/tag Actions runs, and downloaded attachment hash verification.
+- Pre-release package review caught an upgrade-test fixture writing synthetic Steam data beside the build output. The fixture now uses its own Steam directory, and binary packaging uses an explicit product-file list. No test userdata is distributed.
 
 The package is an experimental local build until a GitHub Actions run and the
 additional OS checks below have actually completed. Passing a unit test is not

@@ -4,7 +4,8 @@ if(-not $SkipTests){& (Join-Path $PSScriptRoot 'Test.ps1')}
 $bridgeOutput=Join-Path $PSScriptRoot 'dist'
 New-Item -ItemType Directory -Path $bridgeOutput -Force | Out-Null
 $bridgeRelease=Join-Path $bridgeOutput 'CodexSteamBridge-v0.2.0-windows-x64.zip'
-Compress-Archive -Path (Join-Path $PSScriptRoot 'artifacts\app\*') -DestinationPath $bridgeRelease -Force
+$bridgeBinaryPaths=@('CodexSteamBridge.exe','CodexSteamBridge.Hook.exe','README.md','README.en.md','COMPATIBILITY.md','LICENSE','artwork') | ForEach-Object {Join-Path $PSScriptRoot ('artifacts\app\'+$_)}
+Compress-Archive -LiteralPath $bridgeBinaryPaths -DestinationPath $bridgeRelease -Force
 $bridgeSource=Join-Path $bridgeOutput 'CodexSteamBridge-v0.2.0-source.zip'
 $bridgeSourcePaths=@('src','tests','tools','.github','Build.ps1','Test.ps1','Package.ps1','README.md','README.en.md','COMPATIBILITY.md','LICENSE','.gitignore','CHANGELOG.md','RELEASE-CHECKLIST.md')
 Add-Type -AssemblyName System.IO.Compression.FileSystem
