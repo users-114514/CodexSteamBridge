@@ -30,6 +30,12 @@ namespace CodexSteamBridge
             if (settings.SchemaVersion == 2 && settings.CodexProfiles.Count == 0 && !string.IsNullOrEmpty(settings.CodexHome))
                 settings.CodexProfiles.Add(new CodexProfile { Id = "default", CodexHome = settings.CodexHome,
                     ExtensionExe = settings.CodexExe, ExtensionEnabled = !string.IsNullOrEmpty(settings.CodexExe), LegacyHooks = true });
+            foreach (var profile in settings.CodexProfiles)
+                if (profile != null && profile.Enabled && profile.ExtensionEnabled && !File.Exists(profile.ExtensionExe))
+                {
+                    string currentExtension = Discovery.CodexExe();
+                    if (currentExtension.Length != 0) profile.ExtensionExe = currentExtension;
+                }
             settings.SchemaVersion = 3;
             return settings;
         }

@@ -111,7 +111,7 @@ namespace CodexSteamBridge
                             else if (profile.CliEnabled && CliDiscovery.SameImage(image, cli))
                             {
                                 codex = p.Id; client = "cli";
-                                if (profile.ExtensionEnabled && (CliDiscovery.SameImage(image, profile.ExtensionExe) || CliDiscovery.SameImage(image, extension)) && Arguments(p).FirstOrDefault() == "app-server")
+                                if (profile.ExtensionEnabled && IsExtensionImage(image, profile, extension) && Arguments(p).FirstOrDefault() == "app-server")
                                 {
                                     uint parent = item.Parent;
                                     for (int n = 0; n < 12; n++)
@@ -122,7 +122,7 @@ namespace CodexSteamBridge
                                     }
                                 }
                             }
-                            else if (profile.ExtensionEnabled && (CliDiscovery.SameImage(image, profile.ExtensionExe) || CliDiscovery.SameImage(image, extension))) { codex = p.Id; client = "vscode"; }
+                            else if (profile.ExtensionEnabled && IsExtensionImage(image, profile, extension)) { codex = p.Id; client = "vscode"; }
                             else return null;
                             if (profile != null)
                             {
@@ -140,6 +140,11 @@ namespace CodexSteamBridge
                 current = item.Parent;
             }
             return null;
+        }
+        static bool IsExtensionImage(string image, CodexProfile profile, string latest)
+        {
+            if (CliDiscovery.SameImage(image, profile.ExtensionExe) || CliDiscovery.SameImage(image, latest)) return true;
+            return Discovery.CodexExes().Any(path => CliDiscovery.SameImage(image, path));
         }
     }
 
@@ -164,7 +169,10 @@ namespace CodexSteamBridge
             return "";
         }
         public static string CodexExe()
+        { return CodexExes().FirstOrDefault() ?? ""; }
+        public static List<string> CodexExes()
         {
+            var result = new List<string>();
             string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             foreach (string folder in new[] { ".vscode", ".vscode-insiders" })
             {
@@ -173,10 +181,10 @@ namespace CodexSteamBridge
                 foreach (string extension in Directory.GetDirectories(extensions, "openai.chatgpt-*").OrderByDescending(p => p, StringComparer.OrdinalIgnoreCase))
                 {
                     string path = Path.Combine(extension, "bin", "windows-x86_64", "codex.exe");
-                    if (File.Exists(path)) return path;
+                    if (File.Exists(path)) result.Add(path);
                 }
             }
-            return "";
+            return result;
         }
         public static string CodexHome()
         {

@@ -119,6 +119,14 @@ public static class CliTests
                 Assert(s.SchemaVersion == 3 && s.CodexProfiles.Count == 1 && s.CodexProfiles[0].LegacyHooks, "legacy migration lost");
                 s.CodexProfiles.Clear(); Profiles.Normalize(s); Assert(s.CodexProfiles.Count == 0, "removed final profile was recreated");
             });
+            Case("runtime settings recover a stale VS Code extension path", () => {
+                string detected = Discovery.CodexExe();
+                if (detected.Length == 0) { Console.WriteLine("SKIP no VS Code extension installed"); return; }
+                Assert(Discovery.CodexExes().Contains(detected), "detected extension missing from image set");
+                var settings = new Settings(); var profile = Profile("refresh", root, app + "\\CodexSteamBridge.exe");
+                profile.ExtensionExe = Path.Combine(root, "removed-extension.exe"); profile.ExtensionEnabled = true; settings.CodexProfiles.Add(profile);
+                Profiles.Normalize(settings); Assert(settings.CodexProfiles[0].ExtensionExe == detected, "stale extension path was not refreshed");
+            });
             Case("Windows paths deduplicate including case, dots and trailing separators", () => {
                 var s = new Settings(); s.CodexProfiles.Add(Profile("one", root, app + "\\CodexSteamBridge.exe"));
                 s.CodexProfiles.Add(Profile("two", root.ToUpperInvariant() + "\\.\\", app + "\\CodexSteamBridge.exe"));

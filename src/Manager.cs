@@ -30,7 +30,7 @@ namespace CodexSteamBridge
         static TableLayoutPanel Table() { return new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 3, Padding = new Padding(10), AutoSize = true }; }
         public Manager()
         {
-            Text = "CodexSteamBridge 0.2.1 — Experimental"; MinimumSize = new Size(900, 740); Size = new Size(1000, 860);
+            Text = "CodexSteamBridge 0.2.3 — Experimental"; MinimumSize = new Size(900, 740); Size = new Size(1000, 860);
             StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); AutoScaleMode = AutoScaleMode.Dpi;
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));

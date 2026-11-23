@@ -1,3 +1,13 @@
+## v0.2.3 (patch)
+
+- Match all installed VS Code Codex extension images at runtime, allowing an already-open older window to continue working during upgrades.
+- Add a regression assertion for the discovered extension image set.
+
+## v0.2.2 (patch)
+
+- Refresh stale VS Code Codex extension paths during runtime settings loading, so extension upgrades recover without manual repair.
+- Add a regression test for runtime stale-entry recovery.
+
 ## v0.2.1 (patch)
 
 - Automatically rediscover the current VS Code Codex executable after an extension update; repair no longer depends on a stale extension path.
