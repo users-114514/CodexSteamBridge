@@ -1,8 +1,8 @@
 # CodexSteamBridge
 
-[简体中文](README.md) · Windows x64 · v0.2.0 experimental · MIT
+[简体中文](README.md) · Windows x64 · v0.2.1 experimental · MIT
 
-[Download Windows package](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.2.0/CodexSteamBridge-v0.2.0-windows-x64.zip) · [Release and SHA-256](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.2.0)
+[Download Windows package](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.2.1/CodexSteamBridge-v0.2.1-windows-x64.zip) · [Release and SHA-256](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.2.1)
 
 Show “Playing Codex” in Steam while local interactive Codex CLI or VS Code Codex tasks run. All tasks finishing ends the presence process. CLI use does not require VS Code.
 

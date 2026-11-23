@@ -30,7 +30,7 @@ namespace CodexSteamBridge
         static TableLayoutPanel Table() { return new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 3, Padding = new Padding(10), AutoSize = true }; }
         public Manager()
         {
-            Text = "CodexSteamBridge 0.2.0 — Experimental"; MinimumSize = new Size(900, 740); Size = new Size(1000, 860);
+            Text = "CodexSteamBridge 0.2.1 — Experimental"; MinimumSize = new Size(900, 740); Size = new Size(1000, 860);
             StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10); AutoScaleMode = AutoScaleMode.Dpi;
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -135,7 +135,8 @@ namespace CodexSteamBridge
                 foreach (string kind in new[] { "vscode", "cli" })
                 {
                     if (!(kind == "cli" ? profile.CliEnabled : profile.ExtensionEnabled)) continue;
-                    string exe = kind == "cli" ? CliDiscovery.Resolve(profile.CliEntry) : profile.ExtensionExe;
+                    string exe = kind == "cli" ? CliDiscovery.Resolve(profile.CliEntry) :
+                        (File.Exists(profile.ExtensionExe) ? profile.ExtensionExe : Discovery.CodexExe());
                     try
                     {
                         var hooks = await Task.Run(() => TrustProbe.Inspect(exe, profile.CodexHome, target));
@@ -159,7 +160,7 @@ namespace CodexSteamBridge
                     int count = state.Tasks.Count(t => t.Active && t.SessionId.StartsWith(profile.Id + ":", StringComparison.Ordinal));
                     var issue = state.Issues.FirstOrDefault(i => i.ProfileId == profile.Id);
                     status.Text += profile.CodexHome + " — " + (profile.Enabled ? T("启用", "enabled") : T("停用", "disabled")) + " / " + T("活动任务：", "active tasks: ") + count +
-                        " / VS Code: " + (File.Exists(profile.ExtensionExe) ? T("已找到", "found") : T("未找到", "missing")) + " / CLI: " + (CliDiscovery.Resolve(profile.CliEntry).Length != 0 ? T("已找到", "found") : T("未找到", "missing")) +
+                        " / VS Code: " + ((File.Exists(profile.ExtensionExe) || Discovery.CodexExe().Length != 0) ? T("已找到", "found") : T("未找到", "missing")) + " / CLI: " + (CliDiscovery.Resolve(profile.CliEntry).Length != 0 ? T("已找到", "found") : T("未找到", "missing")) +
                         (issue == null ? "" : " / " + Reason(issue.Reason, English)) + "\n";
                 }
                 status.Text += trust.Length == 0 ? T("点击“检查状态”核对各客户端通知授权。", "Select Check status to verify each client's hook trust.") : trust;

@@ -8,7 +8,7 @@
 | .NET Framework | 4.8, x64, current-user installation |
 | Interactive CLI 0.163.0 | 官方 npm 原生包，新建、resume、fork 的真实任务与 Steam 启停；默认及 `--no-daemon` 启动 / official native binary, new/resume/fork smoke tests |
 | Interactive CLI 0.167.0 | 本机独立安装，默认启动首条任务与 Steam 启停实测 / installed standalone binary, default startup smoke test |
-| VS Code extension 26.1021.22027 | 内置 0.164.0-alpha.11.1；原有真实联动已确认，0.2.0 迁移保留 7 项原生授权 / existing confirmed integration, native review preserved |
+| VS Code extension 26.1111.21308 | 内置 0.169.0-alpha.11.1；当前本机真实进程入口已修复，7 项原生授权保留 / current local process entry repaired, native review preserved |
 | Other CLI / extension versions | 未逐版本实测；格式不兼容时隔离退出 / not certified per version |
 | Multiple homes / CLI-only install / npm-NVM layout | 隔离配置、进程及事务测试 / isolated configuration, process and rollback tests |
 | Shared daemon / no-daemon / closed terminal | 隔离真实进程链覆盖；各真实版本的完整交互矩阵未全部执行 / fixture process chains; full native matrix pending |

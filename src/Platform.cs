@@ -95,6 +95,7 @@ namespace CodexSteamBridge
             int codex = 0;
             string client = "";
             string cli = profile != null && profile.CliEnabled ? CliDiscovery.Resolve(profile.CliEntry) : "";
+            string extension = profile != null && profile.ExtensionEnabled ? Discovery.CodexExe() : "";
             for (int i = 0; i < 20; i++)
             {
                 ProcessEntry item;
@@ -110,7 +111,7 @@ namespace CodexSteamBridge
                             else if (profile.CliEnabled && CliDiscovery.SameImage(image, cli))
                             {
                                 codex = p.Id; client = "cli";
-                                if (profile.ExtensionEnabled && CliDiscovery.SameImage(image, profile.ExtensionExe) && Arguments(p).FirstOrDefault() == "app-server")
+                                if (profile.ExtensionEnabled && (CliDiscovery.SameImage(image, profile.ExtensionExe) || CliDiscovery.SameImage(image, extension)) && Arguments(p).FirstOrDefault() == "app-server")
                                 {
                                     uint parent = item.Parent;
                                     for (int n = 0; n < 12; n++)
@@ -121,7 +122,7 @@ namespace CodexSteamBridge
                                     }
                                 }
                             }
-                            else if (profile.ExtensionEnabled && CliDiscovery.SameImage(image, profile.ExtensionExe)) { codex = p.Id; client = "vscode"; }
+                            else if (profile.ExtensionEnabled && (CliDiscovery.SameImage(image, profile.ExtensionExe) || CliDiscovery.SameImage(image, extension))) { codex = p.Id; client = "vscode"; }
                             else return null;
                             if (profile != null)
                             {

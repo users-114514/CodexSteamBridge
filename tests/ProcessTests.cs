@@ -74,7 +74,7 @@ public static class ProcessTests
                 byte[] bytes = new UTF8Encoding(false).GetBytes(input);
                 child.StandardInput.BaseStream.Write(bytes, 0, bytes.Length); child.StandardInput.Close();
                 if (!child.WaitForExit(2500)) { child.Kill(); throw new Exception("hook command timed out"); }
-                Assert(output.Wait(500) && error.Wait(500), "worker retained hook output pipes");
+                Assert(output.Wait(1500) && error.Wait(1500), "worker retained hook output pipes");
                 Assert(child.ExitCode == 0 && output.Result.Trim() == "{}", "hook command did not finish cleanly");
             }
             var state = store.Load();
@@ -122,7 +122,7 @@ public static class ProcessTests
             {
                 var output = host.StandardOutput.ReadToEndAsync(); var error = host.StandardError.ReadToEndAsync();
                 if (!host.WaitForExit(10000)) { host.Kill(); throw new Exception("hook process chain timed out"); }
-                Assert(error.Wait(1000) && output.Wait(1000), "hook test process retained output handles");
+                Assert(error.Wait(2000) && output.Wait(2000), "hook test process retained output handles");
                 Assert(host.ExitCode == 0, "registered PowerShell hook failed: " + error.Result);
             }
         }

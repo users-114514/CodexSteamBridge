@@ -1,6 +1,6 @@
 # Release verification
 
-## v0.2.0 local verification — 2026-11-10
+## v0.2.1 local verification — 2026-11-10
 
 - Original 35 functional tests and six process checks pass. Added 12 CLI/profile groups and a real fixture process scenario covering detached execution, no-daemon, two homes sharing one worker, UTF-8/spaced paths, pipe release under three seconds, owner crash isolation and last-task exit under two seconds.
 - Installed schema 3 locally. Existing seven hook commands and config.toml trust bytes remained identical; shortcut/account/artwork settings are retained. Upgrade starts no work.

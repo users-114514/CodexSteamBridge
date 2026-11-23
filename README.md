@@ -1,8 +1,8 @@
 # CodexSteamBridge
 
-[English](README.en.md) · Windows x64 · v0.2.0 实验版 · MIT
+[English](README.en.md) · Windows x64 · v0.2.1 实验版 · MIT
 
-[下载 Windows 程序包](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.2.0/CodexSteamBridge-v0.2.0-windows-x64.zip) · [发布说明与 SHA-256](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.2.0)
+[下载 Windows 程序包](https://github.com/users-114514/CodexSteamBridge/releases/download/v0.2.1/CodexSteamBridge-v0.2.1-windows-x64.zip) · [发布说明与 SHA-256](https://github.com/users-114514/CodexSteamBridge/releases/tag/v0.2.1)
 
 本机 Codex CLI 或 VS Code Codex 执行任务时，在 Steam 显示“正在玩 Codex”；全部任务结束后退出状态程序。CLI 可独立使用，无需安装 VS Code。
 

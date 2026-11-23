@@ -42,6 +42,11 @@ namespace CodexSteamBridge
                 if (profile == null || string.IsNullOrEmpty(profile.Id) || profile.Id.Length > 64 || profile.Id.Any(c => !Characters.LetterOrDigit(c) && c != '-' && c != '_'))
                     throw new InvalidDataException("Invalid profile identifier");
                 profile.CodexHome = Home(profile.CodexHome);
+                if (profile.Enabled && profile.ExtensionEnabled && !File.Exists(profile.ExtensionExe))
+                {
+                    string currentExtension = Discovery.CodexExe();
+                    if (currentExtension.Length != 0) profile.ExtensionExe = currentExtension;
+                }
                 if (!ids.Add(profile.Id) || !homes.Add(profile.CodexHome)) throw new InvalidDataException("Duplicate Codex profile or home directory");
                 if (profile.LegacyHooks && profile.Id != settings.DefaultProfileId) throw new InvalidDataException("Legacy hooks require the default profile");
                 if (!Directory.Exists(profile.CodexHome)) throw new DirectoryNotFoundException("Codex home not found: " + profile.CodexHome);

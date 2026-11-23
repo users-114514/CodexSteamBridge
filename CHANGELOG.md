@@ -1,3 +1,7 @@
+## v0.2.1 (patch)
+
+- Automatically rediscover the current VS Code Codex executable after an extension update; repair no longer depends on a stale extension path.
+
 # Changelog
 
 ## v0.2.0 (experimental)
